@@ -30,6 +30,18 @@ const useStore = create((set) => ({
     })),
 
 
+    maxPooling2dConfig: {
+        poolSize: [2, 2],
+        strides: [2, 2],
+    },
+    setPoolSize: (poolSize) => set((state) => ({
+        maxPooling2dConfig: { ...state.conv2dConfig, poolSize:[poolSize, poolSize] }
+    })),
+    setstridesSize: (stridesSize) => set((state) => ({
+        maxPooling2dConfig: { ...state.conv2dConfig, strides:[stridesSize, stridesSize] }
+    })),
+
+
 }));
 
 export default useStore;

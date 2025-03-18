@@ -10,6 +10,8 @@ import {
 import './dist.css';
 
 import UseData from './UseData';
+import Conv2DNode from './modelAdd/conv2d'
+import maxPooling2d from './modelAdd/maxPooling2d';
  
 const rfStyle = {
     backgroundColor: '#B8CEFF',
@@ -24,26 +26,26 @@ const initialNodes = [
   },
   {
     id: 'node-2',
-    type: 'output',
+    type: 'conv2d',
     targetPosition: 'top',
-    position: { x: 0, y: 200 },
+    position: { x: 0, y: 100 },
     data: { label: 'node 2' },
   },
   {
     id: 'node-3',
-    type: 'output',
+    type: 'maxPooling2d',
     targetPosition: 'top',
-    position: { x: 200, y: 200 },
+    position: { x: 0, y: 700 },
     data: { label: 'node 3' },
-  },
+  }
 ];
  
 const initialEdges = [
     { id: 'edge-1', source: 'node-1', target: 'node-2', sourceHandle: 'a' },
-    { id: 'edge-2', source: 'node-1', target: 'node-3', sourceHandle: 'b' },
+    { id: 'edge-2', source: 'node-2', target: 'node-3', sourceHandle: 'b' },
 ];
  
-const nodeTypes = { useData: UseData };
+const nodeTypes = { useData: UseData, conv2d:Conv2DNode, maxPooling2d: maxPooling2d };
  
 function Flow() {
   const [nodes, setNodes] = useState(initialNodes);
