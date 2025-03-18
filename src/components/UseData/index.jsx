@@ -1,14 +1,13 @@
 import React, { useCallback } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import useDataStore from '@/store'
-import { create } from 'zustand'
+import useStore from '@/store'
 
 const handleStyle = { left: 10 };
 
 function UseData() {
-    const onChange = useDataStore((state) => state.useData)
-    const isData = useDataStore((state) => state.isData) 
-    const changeData = useDataStore((state) => state.changeData)
+    const onChange = useStore((state) => state.useData)
+    const isData = useStore((state) => state.isData) 
+    const changeData = useStore((state) => state.changeData)
     const cons = () => {
         changeData()
         console.log(isData)

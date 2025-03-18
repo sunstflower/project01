@@ -9,7 +9,7 @@ import {
 } from '@xyflow/react';
 import './dist.css';
 
-import UseData from './components/UseData';
+import UseData from './UseData';
  
 const rfStyle = {
     backgroundColor: '#B8CEFF',
