@@ -11,7 +11,9 @@ function flatten(){
                 className="w-4 h-4 bg-gray-300 rounded-full"
             />
            <div>
-           <label htmlFor="kernelSizeInput" className="block text-sm font-medium text-gray-700"> flatten </label>
+            
+           <label htmlFor=" flatten" className="block text-sm font-medium text-gray-700">  flatten </label>
+           
            </div>
             <Handle
                 type="source"

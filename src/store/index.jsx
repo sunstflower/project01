@@ -44,6 +44,16 @@ const useStore = create((set) => ({
     updateMaxPooling2dConfig: (index, config) => set((state) => ({
         maxPooling2dConfigs: state.maxPooling2dConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
     })),
+
+
+    denseConfig: {
+        units: 10,
+        kernelInitializer: 'varianceScaling',
+        activation: 'softmax'
+    },
+    updateDenseConfig: (config) => set((state) => ({
+        denseConfig: {...state.denseConfig, ...config}
+    })),
 }));
 
 export default useStore;

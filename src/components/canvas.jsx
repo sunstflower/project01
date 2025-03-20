@@ -12,6 +12,8 @@ import './dist.css';
 import UseData from './UseData';
 import Conv2DNode from './modelAdd/conv2d1';
 import MaxPooling2DNode from './modelAdd/maxPooling2d';
+import dense from './modelAdd/dense'
+import TrainButton from './modelAdd/train'
 
 const rfStyle = {
   backgroundColor: '#B8CEFF',
@@ -52,6 +54,20 @@ const initialNodes = [
     position: { x: 200, y: 400 },
     data: { label: 'MaxPooling2D Layer 2', index: 1 },
   },
+  {
+    id: 'node-6',
+    type: 'dense',
+    targetPosition: 'top',
+    position: { x: 0, y: 600 },
+    data: { label: 'MaxPooling2D Layer 2', index: 1 },
+  },
+  {
+    id: 'node-7',
+    type: 'TrainButton',
+    targetPosition: 'top',
+    position: { x: 0, y: 600 },
+    data: { label: 'MaxPooling2D Layer 2', index: 1 },
+  },
 ];
 
 const initialEdges = [
@@ -65,6 +81,8 @@ const nodeTypes = {
   useData: UseData,
   conv2d: Conv2DNode,
   maxPooling2d: MaxPooling2DNode,
+  dense: dense,
+  TrainButton: TrainButton,
 };
 
 function Flow() {
