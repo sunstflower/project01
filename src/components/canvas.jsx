@@ -71,10 +71,12 @@ const initialNodes = [
 ];
 
 const initialEdges = [
-  { id: 'edge-1', source: 'node-1', target: 'node-2', sourceHandle: 'a' },
-  { id: 'edge-2', source: 'node-2', target: 'node-3', sourceHandle: 'b' },
-  { id: 'edge-3', source: 'node-1', target: 'node-4', sourceHandle: 'a' },
-  { id: 'edge-4', source: 'node-4', target: 'node-5', sourceHandle: 'b' },
+  { id: 'edge-1', source: 'node-1', target: 'node-2', animated: true },
+  { id: 'edge-2', source: 'node-2', target: 'node-3', animated: true },
+  { id: 'edge-3', source: 'node-3', target: 'node-4', animated: true },
+  { id: 'edge-4', source: 'node-4', target: 'node-5', animated: true },
+  { id: 'edge-5', source: 'node-5', target: 'node-6', animated: true },
+  
 ];
 
 const nodeTypes = {
