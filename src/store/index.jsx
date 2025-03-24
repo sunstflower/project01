@@ -2,7 +2,14 @@ import { create } from 'zustand';
 
 const useStore = create((set) => ({
     isData: false,
-    changeData: () => set(() => ({ isData: true })),
+    changeData: (data) => set(() => ({ isData: true, csvData: data })),
+
+    csvData: [
+
+    ],
+    addCsvData: (config) => set((state) => ({
+        csvData: [...state.csvData, config]
+    })),
 
     conv2dConfigs: [
         {

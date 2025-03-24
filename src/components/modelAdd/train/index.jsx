@@ -68,53 +68,85 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig) {
   return model;
 }
 
-async function train(model, data) {
+async function train(model, data, isCsv) {
   const metrics = ['loss', 'val_loss', 'acc', 'val_acc'];
   const container = { name: 'Model Training', tab: 'Model', styles: { height: '1000px' } };
   const fitCallbacks = tfvis.show.fitCallbacks(container, metrics);
 
-  const BATCH_SIZE = 512;
-  const TRAIN_DATA_SIZE = 5500;
-  const TEST_DATA_SIZE = 1000;
+  let trainXs, trainYs, testXs, testYs;
 
-  const [trainXs, trainYs] = tf.tidy(() => {
-    const d = data.nextTrainBatch(TRAIN_DATA_SIZE);
-    return [
-      d.xs.reshape([TRAIN_DATA_SIZE, 28, 28, 1]),
-      d.labels
-    ];
-  });
+  if (isCsv) {
+    // Assuming CSV has columns: pixel1, pixel2, ..., pixel784, label
+    const pixels = data.map(row => Object.values(row).slice(0, -1).map(Number));
+    const labels = data.map(row => Number(row.label));
 
-  const [testXs, testYs] = tf.tidy(() => {
-    const d = data.nextTestBatch(TEST_DATA_SIZE);
-    return [
-      d.xs.reshape([TEST_DATA_SIZE, 28, 28, 1]),
-      d.labels
-    ];
-  });
+    const xs = tf.tensor(pixels, [pixels.length, 28, 28, 1]);
+    const ys = tf.oneHot(labels, 10);
+
+    // Split into training and testing sets
+    const splitIndex = Math.floor(xs.shape[0] * 0.8);
+    [trainXs, testXs] = tf.split(xs, [splitIndex, xs.shape[0] - splitIndex]);
+    [trainYs, testYs] = tf.split(ys, [splitIndex, ys.shape[0] - splitIndex]);
+
+    xs.dispose();
+    ys.dispose();
+  } else {
+    const BATCH_SIZE = 512;
+    const TRAIN_DATA_SIZE = 5500;
+    const TEST_DATA_SIZE = 1000;
+
+    [trainXs, trainYs] = tf.tidy(() => {
+      const d = data.nextTrainBatch(TRAIN_DATA_SIZE);
+      return [
+        d.xs.reshape([TRAIN_DATA_SIZE, 28, 28, 1]),
+        d.labels
+      ];
+    });
+
+    [testXs, testYs] = tf.tidy(() => {
+      const d = data.nextTestBatch(TEST_DATA_SIZE);
+      return [
+        d.xs.reshape([TEST_DATA_SIZE, 28, 28, 1]),
+        d.labels
+      ];
+    });
+  }
 
   return model.fit(trainXs, trainYs, {
-    batchSize: BATCH_SIZE,
+    batchSize: 512,
     validationData: [testXs, testYs],
     epochs: 10,
     shuffle: true,
     callbacks: fitCallbacks
+  }).finally(() => {
+    trainXs.dispose();
+    trainYs.dispose();
+    testXs.dispose();
+    testYs.dispose();
   });
 }
 
 function TrainButton() {
-  const { conv2dConfigs, maxPooling2dConfigs, denseConfig } = useStore();
+  const { conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData } = useStore();
 
   const handleTrainClick = useCallback(async () => {
-    const data = new MnistData();
-    await data.load();
-    await showExamples(data);
+    let data;
+    let isCsv = false;
+
+    if (isData) {
+      data = csvData;
+      isCsv = true;
+    } else {
+      data = new MnistData();
+      await data.load();
+      await showExamples(data);
+    }
 
     const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig);
     tfvis.show.modelSummary({ name: 'Model Architecture', tab: 'Model' }, model);
 
-    await train(model, data);
-  }, [conv2dConfigs, maxPooling2dConfigs, denseConfig]);
+    await train(model, data, isCsv);
+  }, [conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData]);
 
   return (
     <button 
@@ -127,6 +159,3 @@ function TrainButton() {
 }
 
 export default TrainButton;
-
-
-

@@ -17,6 +17,7 @@
     "@tensorflow/tfjs-vis": "^1.5.1",
     "@xyflow/react": "^12.4.4",
     "antd": "^5.24.3",
+    "papaparse": "^5.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",
