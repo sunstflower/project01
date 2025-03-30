@@ -1,8 +1,8 @@
 import React, { useCallback } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { MnistData } from '@/tfjs/data.js';
-import useStore from '@/store'; 
+import { MnistData } from '@/tfjs/data.js'; // 确保路径正确
+import useStore from '@/store'; // 确保路径正确
 
 async function showExamples(data) {
   const surface = tfvis.visor().surface({ name: 'Input Data Examples', tab: 'Input Data' });
@@ -32,30 +32,27 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig) {
   const IMAGE_HEIGHT = 28;
   const IMAGE_CHANNELS = 1;
 
-  // First Conv2D layer
-  model.add(tf.layers.conv2d({
-    inputShape: [IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS],
-    ...conv2dConfigs[0]
-  }));
+  // Add layers based on configurations
+  conv2dConfigs.forEach((config, index) => {
+    if (index === 0) {
+      model.add(tf.layers.conv2d({
+        inputShape: [IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS],
+        ...config
+      }));
+    } else {
+      model.add(tf.layers.conv2d(config));
+    }
+  });
 
-  // First MaxPooling2D layer
-  model.add(tf.layers.maxPooling2d(maxPooling2dConfigs[0]));
-
-  // Second Conv2D layer
-  model.add(tf.layers.conv2d({
-    ...conv2dConfigs[1]
-  }));
-
-  // Second MaxPooling2D layer
-  model.add(tf.layers.maxPooling2d(maxPooling2dConfigs[1]));
+  maxPooling2dConfigs.forEach((config) => {
+    model.add(tf.layers.maxPooling2d(config));
+  });
 
   // Flatten the output
   model.add(tf.layers.flatten());
 
   // Dense output layer
-  model.add(tf.layers.dense({
-    ...denseConfig
-  }));
+  model.add(tf.layers.dense(denseConfig));
 
   // Compile the model
   const optimizer = tf.train.adam();
@@ -159,3 +156,6 @@ function TrainButton() {
 }
 
 export default TrainButton;
+
+
+

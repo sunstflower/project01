@@ -1,3 +1,98 @@
 @import "tailwindcss";
 @import 'reactflow/dist/style.css';
 
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin: 0;
+    padding: 0;
+}
+
+.p-8 {
+    padding: 2rem;
+}
+
+.flex {
+    display: flex;
+}
+
+.space-x-4 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-x-reverse: 0;
+    margin-right: calc(1rem * var(--tw-space-x-reverse));
+    margin-left: calc(1rem * calc(1 - var(--tw-space-x-reverse)));
+}
+
+.mb-8 {
+    margin-bottom: 2rem;
+}
+
+.px-4 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.py-2 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.bg-blue-500 {
+    background-color: #63b3ed;
+}
+
+.text-white {
+    color: white;
+}
+
+.rounded {
+    border-radius: 0.25rem;
+}
+
+.hover\:bg-blue-600:hover {
+    background-color: #5a71a8;
+}
+
+.relative {
+    position: relative;
+}
+
+.h-full {
+    height: 100%;
+}
+
+.w-full {
+    width: 100%;
+}
+
+.absolute {
+    position: absolute;
+}
+
+.bottom-0 {
+    bottom: 0;
+}
+
+.left-0 {
+    left: 0;
+}
+
+/* Additional styles for React Flow */
+.react-flow__background {
+    background-color: #B8CEFF;
+}
+
+.react-flow__controls button {
+    background-color: #63b3ed;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.react-flow__controls button:hover {
+    background-color: #5a71a8;
+}
+
+
+
