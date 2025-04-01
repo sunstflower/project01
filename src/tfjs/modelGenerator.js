@@ -3,215 +3,467 @@
  */
 
 // 生成模型代码
-export const generateModelCode = (modelStructure) => {
-  if (!modelStructure || !Array.isArray(modelStructure) || modelStructure.length === 0) {
-    return '// 请添加模型组件后再生成代码';
-  }
-
-  let code = `
-// TensorFlow.js 模型定义代码
-const createModel = () => {
-  const model = tf.sequential();
-  
-`;
-
-  // 添加各个层
-  modelStructure.forEach((node, index) => {
-    if (node.type === 'conv2d') {
-      code += generateConv2DCode(node.config, index === 0);
-    } else if (node.type === 'maxPooling2d') {
-      code += generateMaxPooling2DCode(node.config);
-    } else if (node.type === 'dense') {
-      code += generateDenseCode(node.config);
+export const generateModelCode = (modelStructure, edges) => {
+    if (!modelStructure || !Array.isArray(modelStructure) || modelStructure.length === 0) {
+      return '// Please add model components before generating code';
     }
-  });
-
-  // 添加编译和训练方法
-  code += `
-  // 编译模型
-  model.compile({
-    optimizer: 'adam',
-    loss: 'categoricalCrossentropy',
-    metrics: ['accuracy'],
-  });
   
-  return model;
-};
-
-// 训练模型函数
-const trainModel = async (model, xs, ys) => {
-  return await model.fit(xs, ys, {
-    epochs: 10,
-    callbacks: tfvis.show.fitCallbacks(
-      { name: 'Training Performance' },
-      ['loss', 'acc'],
-      { height: 200, callbacks: ['onEpochEnd'] }
-    )
-  });
-};
-
-// 预测函数
-const predict = (model, inputData) => {
-  const prediction = model.predict(inputData);
-  return prediction;
-};
-`;
-
-  return code;
-};
-
-// 生成Conv2D层代码
-const generateConv2DCode = (config, isFirstLayer) => {
-  const { kernelSize = 5, filters = 8, strides = 1, activation = 'relu', kernelInitializer = 'varianceScaling' } = config || {};
-  
-  let code = `  // 添加Conv2D层\n`;
-  if (isFirstLayer) {
-    code += `  model.add(tf.layers.conv2d({\n    inputShape: [28, 28, 1],\n`;
-  } else {
-    code += `  model.add(tf.layers.conv2d({\n`;
-  }
-  
-  code += `    kernelSize: ${kernelSize},\n`;
-  code += `    filters: ${filters},\n`;
-  code += `    strides: ${strides},\n`;
-  code += `    activation: '${activation}',\n`;
-  code += `    kernelInitializer: '${kernelInitializer}'\n`;
-  code += `  }));\n\n`;
-  
-  return code;
-};
-
-// 生成MaxPooling2D层代码
-const generateMaxPooling2DCode = (config) => {
-  const { poolSize = [2, 2], strides = [2, 2] } = config || {};
-  
-  let code = `  // 添加MaxPooling2D层\n`;
-  code += `  model.add(tf.layers.maxPooling2d({\n`;
-  code += `    poolSize: [${poolSize[0]}, ${poolSize[1]}],\n`;
-  code += `    strides: [${strides[0]}, ${strides[1]}]\n`;
-  code += `  }));\n\n`;
-  
-  return code;
-};
-
-// 生成Dense层代码
-const generateDenseCode = (config) => {
-  const { units = 10, activation = 'softmax', kernelInitializer = 'varianceScaling' } = config || {};
-  
-  let code = `  // 添加Flatten层\n`;
-  code += `  model.add(tf.layers.flatten());\n\n`;
-  
-  code += `  // 添加Dense层\n`;
-  code += `  model.add(tf.layers.dense({\n`;
-  code += `    units: ${units},\n`;
-  code += `    activation: '${activation}',\n`;
-  code += `    kernelInitializer: '${kernelInitializer}'\n`;
-  code += `  }));\n\n`;
-  
-  return code;
-};
-
-// 整体模型定义和图连接验证
-export const validateModelStructure = (nodes, edges) => {
-  if (!nodes || nodes.length === 0) {
-    return { valid: false, message: '模型为空，请添加至少一个组件' };
-  }
-
-  // 检查是否有未连接的节点
-  const connectedNodes = new Set();
-  edges.forEach(edge => {
-    connectedNodes.add(edge.source);
-    connectedNodes.add(edge.target);
-  });
-  
-  // 如果只有一个节点，不需要检查连接
-  if (nodes.length === 1) {
-    return { valid: true };
-  }
-  
-  // 检查是否所有非第一个节点都已连接
-  const unconnectedNodes = nodes.filter((node, index) => {
-    // 第一个节点可以没有入边
-    return index > 0 && !connectedNodes.has(node.id);
-  });
-  
-  if (unconnectedNodes.length > 0) {
-    return {
-      valid: false,
-      message: `有未连接的节点: ${unconnectedNodes.map(n => n.type).join(', ')}`
-    };
-  }
-  
-  return { valid: true };
-};
-
-// 从图结构生成模型层次结构
-export const generateModelStructureFromGraph = (nodes, edges) => {
-  // 如果没有节点，返回空数组
-  if (!nodes || nodes.length === 0) {
-    return [];
-  }
-  
-  // 创建邻接表表示图
-  const adjacencyList = {};
-  nodes.forEach(node => {
-    adjacencyList[node.id] = {
-      node,
-      next: [],
-    };
-  });
-  
-  // 填充邻接表的next数组
-  edges.forEach(edge => {
-    if (adjacencyList[edge.source]) {
-      adjacencyList[edge.source].next.push(edge.target);
-    }
-  });
-  
-  // 找到没有入边的节点(源节点)
-  const inDegree = {};
-  nodes.forEach(node => {
-    inDegree[node.id] = 0;
-  });
-  
-  edges.forEach(edge => {
-    inDegree[edge.target]++;
-  });
-  
-  const sources = nodes
-    .filter(node => inDegree[node.id] === 0)
-    .map(node => node.id);
-  
-  // 如果没有源节点，使用第一个节点作为起点
-  const startNode = sources.length > 0 ? sources[0] : nodes[0].id;
-  
-  // 使用BFS遍历图获取有序模型结构
-  const modelStructure = [];
-  const visited = new Set();
-  const queue = [startNode];
-  
-  while (queue.length > 0) {
-    const currentId = queue.shift();
+    // 检查是否有MNIST数据源
+    const hasMnistDataset = modelStructure.some(node => node.type === 'mnist');
     
-    if (visited.has(currentId)) continue;
-    visited.add(currentId);
+    // 检查是否有CSV数据源
+    const hasCsvDataset = modelStructure.some(node => node.type === 'useData');
+  
+    let code = `
+  // TensorFlow.js Model Definition
+  const createModel = () => {
+    const model = tf.sequential();
     
-    const current = adjacencyList[currentId];
-    if (!current) continue;
-    
-    const { node } = current;
-    modelStructure.push({
-      type: node.type,
-      config: node.data,
-    });
-    
-    // 将所有未访问的邻居加入队列
-    current.next.forEach(nextId => {
-      if (!visited.has(nextId)) {
-        queue.push(nextId);
+  `;
+  
+    // 根据sequenceId排序的层
+    const sortedLayers = [...modelStructure].sort((a, b) => a.config.sequenceId - b.config.sequenceId);
+  
+    // 添加层
+    sortedLayers.forEach((layer, index) => {
+      switch (layer.type) {
+        case 'conv2d':
+          code += generateConv2DCode(layer.config, index === 0);
+          break;
+        case 'maxPooling2d':
+          code += generateMaxPooling2DCode(layer.config);
+          break;
+        case 'dense':
+          // 检查是否需要添加Flatten层
+          const prevLayer = sortedLayers[index - 1];
+          if (prevLayer && (prevLayer.type === 'conv2d' || prevLayer.type === 'maxPooling2d')) {
+            code += `  // Add Flatten layer\n`;
+            code += `  model.add(tf.layers.flatten());\n\n`;
+          }
+          code += generateDenseCode(layer.config);
+          break;
+        default:
+          throw new Error(`Unknown layer type: ${layer.type}`);
       }
     });
+  
+    // 添加编译和训练方法
+    code += `
+    // Compile model
+    model.compile({
+      optimizer: 'adam',
+      loss: 'categoricalCrossentropy',
+      metrics: ['accuracy'],
+    });
+    
+    return model;
+  };
+  
+  `;
+  
+    // 如果使用MNIST数据集，添加MNIST数据加载方法
+    if (hasMnistDataset) {
+      code += `
+  // MNIST Data Loading Utility
+  class MnistData {
+    constructor() {
+      this.trainXs = null;
+      this.trainYs = null;
+      this.testXs = null;
+      this.testYs = null;
+    }
+  
+    async load() {
+      try {
+        // MNIST data loading from TensorFlow.js example
+        const trainImagesUrl = 'https://storage.googleapis.com/tfjs-examples/mnist/train-images-idx3-ubyte';
+        const trainLabelsUrl = 'https://storage.googleapis.com/tfjs-examples/mnist/train-labels-idx1-ubyte';
+        const testImagesUrl = 'https://storage.googleapis.com/tfjs-examples/mnist/t10k-images-idx3-ubyte';
+        const testLabelsUrl = 'https://storage.googleapis.com/tfjs-examples/mnist/t10k-labels-idx1-ubyte';
+  
+        const [trainXs, trainYs, testXs, testYs] = await Promise.all([
+          tf.data.binaryFiles(trainImagesUrl, {
+            arrayBufferView: 'Uint8Array',
+            chunkSize: 60000 * 784 + 16,
+          }).map(parseImages),
+          tf.data.binaryFiles(trainLabelsUrl, {
+            arrayBufferView: 'Uint8Array',
+            chunkSize: 60000 + 8,
+          }).map(parseLabels),
+          tf.data.binaryFiles(testImagesUrl, {
+            arrayBufferView: 'Uint8Array',
+            chunkSize: 10000 * 784 + 16,
+          }).map(parseImages),
+          tf.data.binaryFiles(testLabelsUrl, {
+            arrayBufferView: 'Uint8Array',
+            chunkSize: 10000 + 8,
+          }).map(parseLabels),
+        ]);
+  
+        this.trainXs = trainXs;
+        this.trainYs = trainYs;
+        this.testXs = testXs;
+        this.testYs = testYs;
+        
+        console.log('MNIST dataset loaded successfully');
+      } catch (error) {
+        console.error('Error loading MNIST dataset:', error);
+        throw error;
+      }
+    }
+  
+    getTrainData() {
+      if (!this.trainXs || !this.trainYs) {
+        throw new Error('MNIST dataset not loaded. Call load() first.');
+      }
+      const xs = tf.tensor4d(this.trainXs, [this.trainXs.length / 784, 28, 28, 1]);
+      const labels = tf.tensor2d(this.trainYs, [this.trainYs.length / 10, 10]);
+      return { xs, labels };
+    }
+  
+    getTestData() {
+      if (!this.testXs || !this.testYs) {
+        throw new Error('MNIST dataset not loaded. Call load() first.');
+      }
+      const xs = tf.tensor4d(this.testXs, [this.testXs.length / 784, 28, 28, 1]);
+      const labels = tf.tensor2d(this.testYs, [this.testYs.length / 10, 10]);
+      return { xs, labels };
+    }
   }
   
-  return modelStructure;
-}; 
+  // Helper functions for parsing MNIST data
+  function parseImages(buffer) {
+    return tf.tidy(() => {
+      const start = 16; // Skip the header
+      const length = 784;
+      const data = new Float32Array(buffer.byteLength - start);
+      for (let i = 0; i < buffer.byteLength - start; i++) {
+        data[i] = buffer[start + i] / 255;
+      }
+      return data;
+    });
+  }
+  
+  function parseLabels(buffer) {
+    return tf.tidy(() => {
+      const start = 8; // Skip the header
+      const labels = new Uint8Array(buffer.slice(start));
+      return tf.oneHot(labels, 10).dataSync();
+    });
+  }
+  `;
+    }
+  
+    // 添加训练模型函数
+    code += `
+  // Training function
+  const trainModel = async (model, data) => {
+    try {
+      const metrics = ['loss', 'val_loss', 'acc', 'val_acc'];
+      const container = {
+        name: 'Model Training', tab: 'Model', styles: { height: '1000px' }
+      };
+      const fitCallbacks = tfvis.show.fitCallbacks(container, metrics);
+      
+      const history = await model.fit(data.xs, data.labels, {
+        batchSize: 32,
+        validationSplit: 0.1,
+        epochs: 10,
+        shuffle: true,
+        callbacks: fitCallbacks
+      });
+  
+      return history;
+    } catch (error) {
+      console.error('Error during model training:', error);
+      throw error;
+    }
+  };
+  
+  // Prediction function
+  const predict = (model, inputData) => {
+    try {
+      const prediction = model.predict(inputData);
+      return prediction;
+    } catch (error) {
+      console.error('Error during prediction:', error);
+      throw error;
+    }
+  };
+  
+  // Run training process
+  const run = async () => {
+    try {
+      const model = createModel();
+      tfvis.show.modelSummary({name: 'Model Architecture', tab: 'Model'}, model);
+      
+      ${hasMnistDataset ? `
+      // Load MNIST dataset
+      const data = new MnistData();
+      await data.load();
+      const trainData = data.getTrainData();
+      
+      // Train model
+      const history = await trainModel(model, trainData);
+      
+      // Evaluate model
+      const testData = data.getTestData();
+      const evaluation = await model.evaluate(testData.xs, testData.labels);
+      console.log('Model evaluation:', {
+        loss: evaluation[0].dataSync()[0],
+        accuracy: evaluation[1].dataSync()[0]
+      });
+      ` : `
+      // TODO: Load your data here
+      // const trainData = await loadData();
+      // await trainModel(model, trainData);
+      `}
+      
+      console.log('Training complete');
+    } catch (error) {
+      console.error('Error in training process:', error);
+    }
+  };
+  
+  // Initialize the application
+  document.addEventListener('DOMContentLoaded', () => {
+    if (tfvis) tfvis.visor();
+    run();
+  });
+  `;
+  
+    return code;
+  };
+  
+  // 生成Conv2D层代码
+  const generateConv2DCode = (config, isFirstLayer) => {
+    const { kernelSize = 5, filters = 8, strides = 1, activation = 'relu', kernelInitializer = 'varianceScaling' } = config || {};
+    
+    let code = `  // Add Conv2D layer\n`;
+    if (isFirstLayer) {
+      code += `  model.add(tf.layers.conv2d({\n    inputShape: [28, 28, 1],\n`;
+    } else {
+      code += `  model.add(tf.layers.conv2d({\n`;
+    }
+    
+    code += `    kernelSize: ${kernelSize},\n`;
+    code += `    filters: ${filters},\n`;
+    code += `    strides: ${strides},\n`;
+    code += `    padding: 'valid',\n`;
+    code += `    activation: '${activation}',\n`;
+    code += `    kernelInitializer: '${kernelInitializer}'\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成MaxPooling2D层代码
+  const generateMaxPooling2DCode = (config) => {
+    const { poolSize = [2, 2], strides = [2, 2] } = config || {};
+    
+    let code = `  // Add MaxPooling2D layer\n`;
+    code += `  model.add(tf.layers.maxPooling2d({\n`;
+    code += `    poolSize: [${poolSize[0]}, ${poolSize[1]}],\n`;
+    code += `    strides: [${strides[0]}, ${strides[1]}],\n`;
+    code += `    padding: 'valid'\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成Dense层代码
+  const generateDenseCode = (config) => {
+    const { units = 10, activation = 'softmax', kernelInitializer = 'varianceScaling' } = config || {};
+    
+    let code = `  // Add Dense layer\n`;
+    code += `  model.add(tf.layers.dense({\n`;
+    code += `    units: ${units},\n`;
+    code += `    activation: '${activation}',\n`;
+    code += `    kernelInitializer: '${kernelInitializer}'\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 整体模型定义和图连接验证
+  export const validateModelStructure = (nodes, edges) => {
+    if (!nodes || nodes.length === 0) {
+      return { valid: false, message: 'Model is empty, please add at least one component' };
+    }
+  
+    // 检查是否有未连接的节点
+    const connectedNodes = new Set();
+    edges.forEach(edge => {
+      connectedNodes.add(edge.source);
+      connectedNodes.add(edge.target);
+    });
+    
+    // 如果只有一个节点，不需要检查连接
+    if (nodes.length === 1) {
+      return { valid: true };
+    }
+    
+    // 检查是否所有非第一个节点都已连接
+    const unconnectedNodes = nodes.filter((node, index) => {
+      // 第一个节点可以没有入边
+      return index > 0 && !connectedNodes.has(node.id);
+    });
+    
+    if (unconnectedNodes.length > 0) {
+      return {
+        valid: false,
+        message: `Unconnected nodes found: ${unconnectedNodes.map(n => n.type).join(', ')}`
+      };
+    }
+  
+    // 验证层的顺序和连接
+    const layerOrder = nodes.map(node => node.type);
+    let hasConvLayer = false;
+    let hasMaxPoolingAfterConv = false;
+  
+    // 构建邻接表
+    const adjacencyList = {};
+    nodes.forEach(node => {
+      adjacencyList[node.id] = [];
+    });
+    
+    edges.forEach(edge => {
+      adjacencyList[edge.source].push(edge.target);
+    });
+  
+    // 验证每个层的连接
+    for (let i = 0; i < layerOrder.length; i++) {
+      const node = nodes[i];
+      const layerType = node.type;
+      
+      // 检查输入层
+      if (!edges.some(e => e.target === node.id)) {
+        if (layerType !== 'mnist' && layerType !== 'useData') {
+          return {
+            valid: false,
+            message: `Invalid input layer type: ${layerType}`
+          };
+        }
+      }
+      
+      // 检查卷积层和池化层的关系
+      if (layerType === 'maxPooling2d') {
+        const prevLayer = nodes.find(n => 
+          edges.some(e => e.source === n.id && e.target === node.id)
+        );
+        
+        if (!prevLayer || prevLayer.type !== 'conv2d') {
+          return {
+            valid: false,
+            message: 'MaxPooling2D layer must come after a Conv2D layer'
+          };
+        }
+      }
+      
+      // 检查Dense层的连接
+      if (layerType === 'dense') {
+        const prevLayer = nodes.find(n => 
+          edges.some(e => e.source === n.id && e.target === node.id)
+        );
+        
+        if (prevLayer && (prevLayer.type === 'conv2d' || prevLayer.type === 'maxPooling2d')) {
+          // 这里不需要验证，因为我们在生成代码时会自动添加Flatten层
+        }
+      }
+    }
+    
+    return { valid: true };
+  };
+  
+  // 从图结构生成模型层次结构
+  export const generateModelStructureFromGraph = (nodes, edges) => {
+    // 如果没有节点，返回空数组
+    if (!nodes || nodes.length === 0) {
+      return [];
+    }
+    
+    // 创建邻接表表示图
+    const adjacencyList = {};
+    nodes.forEach(node => {
+      adjacencyList[node.id] = {
+        node,
+        next: [],
+      };
+    });
+    
+    // 填充邻接表的next数组
+    edges.forEach(edge => {
+      if (adjacencyList[edge.source]) {
+        adjacencyList[edge.source].next.push(edge.target);
+      }
+    });
+    
+    // 找到没有入边的节点(源节点)
+    const inDegree = {};
+    nodes.forEach(node => {
+      inDegree[node.id] = 0;
+    });
+    
+    edges.forEach(edge => {
+      inDegree[edge.target]++;
+    });
+    
+    const sources = nodes
+      .filter(node => inDegree[node.id] === 0)
+      .map(node => node.id);
+    
+    // 如果没有源节点，使用第一个节点作为起点
+    const startNode = sources.length > 0 ? sources[0] : nodes[0].id;
+    
+    // 使用BFS遍历图获取有序模型结构
+    const modelStructure = [];
+    const visited = new Set();
+    const queue = [startNode];
+    
+    // 用于跟踪每种类型的节点数量
+    const typeCounts = {
+      conv2d: 0,
+      maxPooling2d: 0,
+      dense: 0
+    };
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      
+      const current = adjacencyList[currentId];
+      if (!current) continue;
+      
+      const { node } = current;
+      
+      // 只添加实际的层节点，跳过数据源节点
+      if (node.type !== 'mnist' && node.type !== 'useData') {
+        // 更新类型计数
+        typeCounts[node.type]++;
+        
+        // 创建新的配置对象，使用正确的索引和序列ID
+        const config = {
+          ...node.data,
+          index: typeCounts[node.type] - 1, // 使用0-based索引
+          sequenceId: node.data.sequenceId // 添加序列ID
+        };
+        
+        modelStructure.push({
+          type: node.type,
+          config
+        });
+      }
+      
+      // 将所有未访问的邻居加入队列
+      current.next.forEach(nextId => {
+        if (!visited.has(nextId)) {
+          queue.push(nextId);
+        }
+      });
+    }
+    
+    // 根据sequenceId排序
+    return modelStructure.sort((a, b) => a.config.sequenceId - b.config.sequenceId);
+  }; 

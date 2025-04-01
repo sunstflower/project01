@@ -1,7 +1,7 @@
 function Look() {
     return(
         <div>
-            fsdfsdfdsf
+            这是主页
         </div>
     )
 }

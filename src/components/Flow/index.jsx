@@ -17,15 +17,17 @@ import { Modal, Button, message } from 'antd';
 import { generateModelCode, validateModelStructure, generateModelStructureFromGraph } from '@/tfjs/modelGenerator';
 
 import UseData from '../UseData';
+import MnistData from '../modelAdd/mnist';
 import Conv2DNode from '../modelAdd/conv2d1';
 import MaxPooling2DNode from '../modelAdd/maxPooling2d';
 import DenseNode from '../modelAdd/dense';
 import TrainButton from '../modelAdd/train';
 import useStore from '@/store'; 
 
+// Apple风格的样式
 const rfStyle = {
-  backgroundColor: '#f8fafc',
-  width: '100%',
+  backgroundColor: '#f5f5f7',
+  width: '100%', 
   height: 'calc(100vh - 64px)', 
 };
 
@@ -35,28 +37,54 @@ const father = {
     width: '100%' 
 }
 
-// 自定义边样式
+// 自定义边样式 - Apple风格
 const edgeOptions = {
   animated: true,
   style: {
-    stroke: '#3b82f6',
+    stroke: '#007aff',
     strokeWidth: 2,
   },
 };
 
-// 自定义连接线选项
+// 自定义连接线选项 - Apple风格
 const connectionLineStyle = {
-  stroke: '#3b82f6',
+  stroke: '#007aff',
   strokeWidth: 2,
 };
 
 // 节点类型映射
 const nodeTypes = {
   useData: UseData,
+  mnist: MnistData,
   conv2d: Conv2DNode,
   maxPooling2d: MaxPooling2DNode,
   dense: DenseNode,
   trainButton: TrainButton,
+};
+
+// 允许连接的节点类型组合
+const isValidConnection = (sourceType, targetType) => {
+  // 数据源只能连接到卷积层
+  if (sourceType === 'useData' || sourceType === 'mnist') {
+    return targetType === 'conv2d';
+  }
+  
+  // 卷积层只能连接到池化层
+  if (sourceType === 'conv2d') {
+    return targetType === 'maxPooling2d';
+  }
+  
+  // 池化层可以连接到卷积层或全连接层
+  if (sourceType === 'maxPooling2d') {
+    return targetType === 'conv2d' || targetType === 'dense';
+  }
+  
+  // 全连接层只能连接到其他全连接层
+  if (sourceType === 'dense') {
+    return targetType === 'dense';
+  }
+  
+  return false;
 };
 
 // 确定节点的默认尺寸（用于自动连接计算）
@@ -92,13 +120,28 @@ function FlowComponent() {
   
   // 处理节点之间的连接
   const onConnect = useCallback((params) => {
+    // 找到源节点和目标节点
+    const sourceNode = elements.find(node => node.id === params.source);
+    const targetNode = elements.find(node => node.id === params.target);
+    
+    // 如果找不到节点，不执行连接
+    if (!sourceNode || !targetNode) return;
+    
+    // 验证连接是否有效
+    if (!isValidConnection(sourceNode.type, targetNode.type)) {
+      message.error(`Cannot connect ${sourceNode.type} to ${targetNode.type}`);
+      return;
+    }
+    
+    // 执行连接
     setEdges((eds) => addEdge({
       ...params,
       type: 'smoothstep',
       animated: true,
-      style: { stroke: '#3b82f6' }
+      style: { stroke: '#007aff' }
     }, eds));
-  }, []);
+    
+  }, [elements]);
 
   // 处理节点变化
   const onNodesChange = useCallback((changes) => {
@@ -122,25 +165,30 @@ function FlowComponent() {
   const tryConnectToLastNode = (newNode, elements) => {
     if (elements.length === 0) return [];
     
-    // 获取所有非训练按钮的节点，按Y坐标排序
-    const sortedNodes = [...elements]
-      .filter(node => node.type !== 'trainButton')
-      .sort((a, b) => a.position.y - b.position.y);
+    // 按照添加顺序获取节点
+    const orderedNodes = [...elements].sort((a, b) => {
+      // 解析节点id中的时间戳（假设格式为 type-timestamp）
+      const aTimestamp = parseInt(a.id.split('-')[1]) || 0;
+      const bTimestamp = parseInt(b.id.split('-')[1]) || 0;
+      return bTimestamp - aTimestamp;  // 最新添加的优先
+    });
     
-    if (sortedNodes.length === 0) return [];
+    // 找到最后添加的可能与新节点连接的节点
+    for (const lastNode of orderedNodes) {
+      if (isValidConnection(lastNode.type, newNode.type)) {
+        // 创建连接
+        return [{
+          id: `e-${lastNode.id}-${newNode.id}`,
+          source: lastNode.id,
+          target: newNode.id,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: '#007aff' }
+        }];
+      }
+    }
     
-    // 获取最后一个节点作为连接源
-    const lastNode = sortedNodes[sortedNodes.length - 1];
-    
-    // 创建连接
-    return [{
-      id: `e-${lastNode.id}-${newNode.id}`,
-      source: lastNode.id,
-      target: newNode.id,
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: '#3b82f6' }
-    }];
+    return [];
   };
 
   // 添加节点的处理函数
@@ -148,40 +196,75 @@ function FlowComponent() {
     let newNode = {};
     let nodeId = '';
     let configIndex = 0;
+    const currentTimestamp = Date.now();
+    
+    // 获取当前节点数量作为序列ID
+    const sequenceId = elements.length;
     
     // 根据节点类型创建不同的节点
     if (type === 'conv2d') {
       configIndex = conv2dConfigs.length;
-      nodeId = `conv2d-${Date.now()}`;
+      nodeId = `conv2d-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'conv2d',
-        data: { index: configIndex },
+        data: { 
+          index: configIndex,
+          sequenceId: sequenceId 
+        },
         position,
       };
     } else if (type === 'maxPooling2d') {
       configIndex = maxPooling2dConfigs.length;
-      nodeId = `maxPooling2d-${Date.now()}`;
+      nodeId = `maxPooling2d-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'maxPooling2d',
-        data: { index: configIndex },
+        data: { 
+          index: configIndex,
+          sequenceId: sequenceId 
+        },
         position,
       };
     } else if (type === 'dense') {
-      nodeId = `dense-${Date.now()}`;
+      nodeId = `dense-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'dense',
-        data: { index: 0 },
+        data: { 
+          index: 0,
+          sequenceId: sequenceId 
+        },
         position,
       };
     } else if (type === 'trainButton') {
-      nodeId = `trainButton-${Date.now()}`;
+      nodeId = `trainButton-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'trainButton',
-        data: {},
+        data: { 
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'useData') {
+      nodeId = `useData-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'useData',
+        data: { 
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'mnist') {
+      nodeId = `mnist-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'mnist',
+        data: { 
+          sequenceId: sequenceId 
+        },
         position,
       };
     }
@@ -199,7 +282,7 @@ function FlowComponent() {
 
   // 使用ReactDnD处理拖拽
   const [{ isOver }, drop] = useDrop({
-    accept: ['conv2d', 'maxPooling2d', 'dense', 'trainButton'],
+    accept: ['conv2d', 'maxPooling2d', 'dense', 'trainButton', 'useData', 'mnist'],
     drop(item, monitor) {
       if (!reactFlowInstance) return;
       
@@ -258,8 +341,8 @@ function FlowComponent() {
       };
     });
     
-    // 生成代码
-    const code = generateModelCode(detailedStructure);
+    // 生成代码，传入edges参数
+    const code = generateModelCode(detailedStructure, edges);
     setGeneratedCode(code);
     setIsModalVisible(true);
   }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfig]);
@@ -267,9 +350,9 @@ function FlowComponent() {
   // 复制代码到剪贴板
   const copyCodeToClipboard = () => {
     navigator.clipboard.writeText(generatedCode).then(() => {
-      message.success('代码已复制到剪贴板');
+      message.success('Code copied to clipboard');
     }, () => {
-      message.error('复制失败，请手动复制');
+      message.error('Failed to copy, please manually copy the code');
     });
   };
 
@@ -306,27 +389,29 @@ function FlowComponent() {
         style={rfStyle}
         deleteKeyCode="Delete"
       >
-        <Background color="#94a3b8" gap={16} variant="dots" />
+        <Background color="#d1d1d6" gap={16} variant="dots" />
         <MiniMap 
           nodeStrokeColor={(n) => {
-            if (n.type === 'conv2d') return '#3b82f6';
-            if (n.type === 'maxPooling2d') return '#10b981';
-            if (n.type === 'dense') return '#8b5cf6';
-            if (n.type === 'trainButton') return '#ef4444';
-            return '#6b7280';
+            if (n.type === 'useData' || n.type === 'mnist') return '#32d74b';
+            if (n.type === 'conv2d') return '#007aff';
+            if (n.type === 'maxPooling2d') return '#5856d6';
+            if (n.type === 'dense') return '#ff9f0a';
+            if (n.type === 'trainButton') return '#ff3b30';
+            return '#8e8e93';
           }}
           nodeColor={(n) => {
+            if (n.type === 'useData' || n.type === 'mnist') return '#a7f3d0';
             if (n.type === 'conv2d') return '#93c5fd';
-            if (n.type === 'maxPooling2d') return '#a7f3d0';
-            if (n.type === 'dense') return '#c4b5fd';
+            if (n.type === 'maxPooling2d') return '#c7d2fe';
+            if (n.type === 'dense') return '#fed7aa';
             if (n.type === 'trainButton') return '#fca5a5';
             return '#d1d5db';
           }}
         />
         <Controls />
         <Panel position="top-right">
-          <div className="bg-white p-3 rounded shadow">
-            <h3 className="text-sm font-bold">拖拽节点到画布构建模型</h3>
+          <div className="bg-white p-3 rounded-xl shadow">
+            <h3 className="text-sm font-medium text-gray-800">Drag & Drop Components</h3>
           </div>
         </Panel>
         <Panel position="bottom-center">
@@ -335,37 +420,46 @@ function FlowComponent() {
             onClick={generateCode}
             size="large"
             style={{
-              background: '#3b82f6',
-              borderColor: '#3b82f6',
+              background: '#007aff',
+              borderColor: '#007aff',
               marginBottom: '20px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+              borderRadius: '12px',
+              paddingLeft: '16px',
+              paddingRight: '16px',
             }}
           >
-            生成TensorFlow.js代码
+            Generate TensorFlow.js Code
           </Button>
         </Panel>
       </ReactFlow>
       
       <Modal
-        title="生成的TensorFlow.js模型代码"
+        title="Generated TensorFlow.js Model Code"
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
         width={800}
         footer={[
-          <Button key="copy" type="primary" onClick={copyCodeToClipboard}>
-            复制代码
+          <Button key="copy" type="primary" onClick={copyCodeToClipboard}
+            style={{
+              background: '#007aff',
+              borderColor: '#007aff',
+            }}
+          >
+            Copy Code
           </Button>,
           <Button key="close" onClick={() => setIsModalVisible(false)}>
-            关闭
+            Close
           </Button>
         ]}
       >
         <pre style={{ 
-          background: '#f8f9fa', 
+          background: '#f5f5f7', 
           padding: '15px', 
-          borderRadius: '5px',
+          borderRadius: '10px',
           maxHeight: '500px',
-          overflow: 'auto' 
+          overflow: 'auto',
+          fontFamily: 'SF Mono, Menlo, monospace',
         }}>
           {generatedCode}
         </pre>
@@ -375,6 +469,5 @@ function FlowComponent() {
 }
 
 export default FlowWithProvider;
-
 
 
