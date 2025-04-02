@@ -25,36 +25,138 @@ async function showExamples(data) {
   }
 }
 
-function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig) {
+function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig, nodes, edges) {
   const model = tf.sequential();
-
   const IMAGE_WIDTH = 28;
   const IMAGE_HEIGHT = 28;
   const IMAGE_CHANNELS = 1;
 
-  // Add layers based on configurations
-  conv2dConfigs.forEach((config, index) => {
-    if (index === 0) {
-      model.add(tf.layers.conv2d({
-        inputShape: [IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS],
-        ...config
-      }));
-    } else {
-      model.add(tf.layers.conv2d(config));
+  // 检查输入参数
+  if (!nodes || nodes.length === 0) {
+    console.error('No nodes found in the model structure');
+    return model;
+  }
+
+  if (!edges || edges.length === 0) {
+    console.error('No edges found in the model structure');
+    return model;
+  }
+
+  console.log('Building model with nodes:', nodes);
+  console.log('Building model with edges:', edges);
+
+  // 构建邻接表
+  const adjacencyList = {};
+  nodes.forEach(node => {
+    adjacencyList[node.id] = {
+      node,
+      next: [],
+    };
+  });
+
+  // 填充邻接表的next数组
+  edges.forEach(edge => {
+    if (adjacencyList[edge.source]) {
+      adjacencyList[edge.source].next.push(edge.target);
     }
   });
 
-  maxPooling2dConfigs.forEach((config) => {
-    model.add(tf.layers.maxPooling2d(config));
+  // 找到没有入边的节点(源节点)
+  const inDegree = {};
+  nodes.forEach(node => {
+    inDegree[node.id] = 0;
   });
 
-  // Flatten the output
-  model.add(tf.layers.flatten());
+  edges.forEach(edge => {
+    inDegree[edge.target]++;
+  });
 
-  // Dense output layer
-  model.add(tf.layers.dense(denseConfig));
+  const sources = nodes
+    .filter(node => inDegree[node.id] === 0)
+    .map(node => node.id);
 
-  // Compile the model
+  console.log('Found sources:', sources);
+
+  // 如果没有源节点，使用第一个节点作为起点
+  const startNode = sources.length > 0 ? sources[0] : nodes[0].id;
+  console.log('Starting from node:', startNode);
+
+  // 使用BFS遍历图获取有序模型结构
+  const visited = new Set();
+  const queue = [startNode];
+  let hasAddedFlatten = false;
+  let layerCount = 0;
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    const current = adjacencyList[currentId];
+    if (!current) {
+      console.warn(`Node ${currentId} not found in adjacency list`);
+      continue;
+    }
+
+    const { node } = current;
+    console.log(`Processing node:`, node);
+
+    // 只添加实际的层节点，跳过数据源节点
+    if (node.type !== 'mnist' && node.type !== 'useData') {
+      switch (node.type) {
+        case 'conv2d':
+          if (layerCount === 0) {
+            // 第一个Conv2D层需要指定inputShape
+            console.log('Adding first Conv2D layer with inputShape');
+            model.add(tf.layers.conv2d({
+              inputShape: [IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS],
+              ...conv2dConfigs[node.configIndex]
+            }));
+          } else {
+            console.log('Adding Conv2D layer');
+            model.add(tf.layers.conv2d(conv2dConfigs[node.configIndex]));
+          }
+          layerCount++;
+          break;
+        case 'maxPooling2d':
+          console.log('Adding MaxPooling2D layer');
+          model.add(tf.layers.maxPooling2d(maxPooling2dConfigs[node.configIndex]));
+          layerCount++;
+          break;
+        case 'dense':
+          // 在添加Dense层之前，确保添加了Flatten层
+          if (!hasAddedFlatten) {
+            console.log('Adding Flatten layer before Dense layer');
+            model.add(tf.layers.flatten());
+            hasAddedFlatten = true;
+            layerCount++;
+          }
+          console.log('Adding Dense layer');
+          model.add(tf.layers.dense(denseConfig));
+          layerCount++;
+          break;
+        default:
+          console.warn(`Unknown node type: ${node.type}`);
+      }
+    }
+
+    // 将所有未访问的邻居加入队列
+    current.next.forEach(nextId => {
+      if (!visited.has(nextId)) {
+        queue.push(nextId);
+      }
+    });
+  }
+
+  console.log(`Total layers added: ${layerCount}`);
+
+  if (layerCount === 0) {
+    console.error('No layers were added to the model');
+    return model;
+  }
+
+  // 编译模型
   const optimizer = tf.train.adam();
   model.compile({
     optimizer: optimizer,
@@ -124,7 +226,7 @@ async function train(model, data, isCsv) {
 }
 
 function TrainButton() {
-  const { conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData } = useStore();
+  const { conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData, nodes, edges } = useStore();
 
   const handleTrainClick = useCallback(async () => {
     let data;
@@ -139,11 +241,11 @@ function TrainButton() {
       await showExamples(data);
     }
 
-    const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig);
+    const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig, nodes, edges);
     tfvis.show.modelSummary({ name: 'Model Architecture', tab: 'Model' }, model);
 
     await train(model, data, isCsv);
-  }, [conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData]);
+  }, [conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData, nodes, edges]);
 
   return (
     <button 
