@@ -33,14 +33,38 @@ export const generateModelCode = (modelStructure, edges) => {
         case 'maxPooling2d':
           code += generateMaxPooling2DCode(layer.config);
           break;
+        case 'avgPooling2d':
+          code += generateAvgPooling2DCode(layer.config);
+          break;
         case 'dense':
           // 检查是否需要添加Flatten层
           const prevLayer = sortedLayers[index - 1];
-          if (prevLayer && (prevLayer.type === 'conv2d' || prevLayer.type === 'maxPooling2d')) {
+          if (prevLayer && (prevLayer.type === 'conv2d' || prevLayer.type === 'maxPooling2d' || prevLayer.type === 'avgPooling2d')) {
             code += `  // Add Flatten layer\n`;
             code += `  model.add(tf.layers.flatten());\n\n`;
           }
           code += generateDenseCode(layer.config);
+          break;
+        case 'dropout':
+          code += generateDropoutCode(layer.config);
+          break;
+        case 'batchNorm':
+          code += generateBatchNormCode(layer.config);
+          break;
+        case 'flatten':
+          code += generateFlattenCode();
+          break;
+        case 'lstm':
+          code += generateLSTMCode(layer.config, index === 0);
+          break;
+        case 'gru':
+          code += generateGRUCode(layer.config, index === 0);
+          break;
+        case 'activation':
+          code += generateActivationCode(layer.config);
+          break;
+        case 'reshape':
+          code += generateReshapeCode(layer.config);
           break;
         default:
           throw new Error(`Unknown layer type: ${layer.type}`);
@@ -51,8 +75,8 @@ export const generateModelCode = (modelStructure, edges) => {
     code += `
     // Compile model
     model.compile({
-      optimizer: 'adam',
-      loss: 'categoricalCrossentropy',
+      optimizer: ${generateOptimizerCode(modelStructure.find(layer => layer.type === 'optimizer')?.config) || "'adam'"},
+      loss: ${generateLossCode(modelStructure.find(layer => layer.type === 'loss')?.config) || "'categoricalCrossentropy'"},
       metrics: ['accuracy'],
     });
     
@@ -283,6 +307,195 @@ export const generateModelCode = (modelStructure, edges) => {
     code += `  }));\n\n`;
     
     return code;
+  };
+  
+  // 生成Dropout层代码
+  const generateDropoutCode = (config) => {
+    const { rate = 0.2 } = config || {};
+    
+    let code = `  // Add Dropout layer\n`;
+    code += `  model.add(tf.layers.dropout({\n`;
+    code += `    rate: ${rate}\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成BatchNormalization层代码
+  const generateBatchNormCode = (config) => {
+    const { 
+      axis = -1, 
+      momentum = 0.99, 
+      epsilon = 0.001, 
+      center = true, 
+      scale = true 
+    } = config || {};
+    
+    let code = `  // Add BatchNormalization layer\n`;
+    code += `  model.add(tf.layers.batchNormalization({\n`;
+    code += `    axis: ${axis},\n`;
+    code += `    momentum: ${momentum},\n`;
+    code += `    epsilon: ${epsilon},\n`;
+    code += `    center: ${center},\n`;
+    code += `    scale: ${scale}\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成Flatten层代码
+  const generateFlattenCode = () => {
+    let code = `  // Add Flatten layer\n`;
+    code += `  model.add(tf.layers.flatten());\n\n`;
+    
+    return code;
+  };
+  
+  // 生成LSTM层代码
+  const generateLSTMCode = (config, isFirstLayer) => {
+    const { 
+      units = 128, 
+      activation = 'tanh', 
+      recurrentActivation = 'sigmoid',
+      returnSequences = false,
+      dropout = 0.0,
+      recurrentDropout = 0.0
+    } = config || {};
+    
+    let code = `  // Add LSTM layer\n`;
+    if (isFirstLayer) {
+      // 为第一层添加inputShape
+      code += `  model.add(tf.layers.lstm({\n`;
+      code += `    inputShape: [null, 28],\n`; // 假设输入是序列数据，需要根据实际情况调整
+    } else {
+      code += `  model.add(tf.layers.lstm({\n`;
+    }
+    
+    code += `    units: ${units},\n`;
+    code += `    activation: '${activation}',\n`;
+    code += `    recurrentActivation: '${recurrentActivation}',\n`;
+    code += `    returnSequences: ${returnSequences},\n`;
+    
+    if (dropout > 0) {
+      code += `    dropout: ${dropout},\n`;
+    }
+    
+    if (recurrentDropout > 0) {
+      code += `    recurrentDropout: ${recurrentDropout},\n`;
+    }
+    
+    code += `    useBias: true\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成GRU层代码
+  const generateGRUCode = (config, isFirstLayer) => {
+    const { 
+      units = 128, 
+      activation = 'tanh', 
+      recurrentActivation = 'sigmoid',
+      returnSequences = false,
+      dropout = 0.0,
+      recurrentDropout = 0.0
+    } = config || {};
+    
+    let code = `  // Add GRU layer\n`;
+    if (isFirstLayer) {
+      // 为第一层添加inputShape
+      code += `  model.add(tf.layers.gru({\n`;
+      code += `    inputShape: [null, 28],\n`; // 假设输入是序列数据，需要根据实际情况调整
+    } else {
+      code += `  model.add(tf.layers.gru({\n`;
+    }
+    
+    code += `    units: ${units},\n`;
+    code += `    activation: '${activation}',\n`;
+    code += `    recurrentActivation: '${recurrentActivation}',\n`;
+    code += `    returnSequences: ${returnSequences},\n`;
+    
+    if (dropout > 0) {
+      code += `    dropout: ${dropout},\n`;
+    }
+    
+    if (recurrentDropout > 0) {
+      code += `    recurrentDropout: ${recurrentDropout},\n`;
+    }
+    
+    code += `    useBias: true\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成激活函数层代码
+  const generateActivationCode = (config) => {
+    const { activation = 'relu' } = config || {};
+    
+    let code = `  // Add Activation layer\n`;
+    code += `  model.add(tf.layers.activation({\n`;
+    code += `    activation: '${activation}'\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成Reshape层代码
+  const generateReshapeCode = (config) => {
+    const { targetShape = [28, 28, 1] } = config || {};
+    
+    let code = `  // Add Reshape layer\n`;
+    code += `  model.add(tf.layers.reshape({\n`;
+    code += `    targetShape: [${targetShape.join(', ')}]\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成AvgPooling2D层代码
+  const generateAvgPooling2DCode = (config) => {
+    const { poolSize = [2, 2], strides = [2, 2], padding = 'valid' } = config || {};
+    
+    let code = `  // Add AveragePooling2D layer\n`;
+    code += `  model.add(tf.layers.averagePooling2d({\n`;
+    code += `    poolSize: [${poolSize[0]}, ${poolSize[1]}],\n`;
+    code += `    strides: [${strides[0]}, ${strides[1]}],\n`;
+    code += `    padding: '${padding}'\n`;
+    code += `  }));\n\n`;
+    
+    return code;
+  };
+  
+  // 生成优化器代码
+  const generateOptimizerCode = (config) => {
+    if (!config) return "'adam'";
+    
+    const { type = 'adam', learningRate = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-7, decay = 0.0 } = config;
+    
+    switch (type) {
+      case 'adam':
+        return `tf.train.adam(${learningRate}, ${beta1}, ${beta2}, ${epsilon})`;
+      case 'sgd':
+        return `tf.train.sgd(${learningRate})`;
+      case 'rmsprop':
+        return `tf.train.rmsprop(${learningRate}, ${decay})`;
+      case 'adagrad':
+        return `tf.train.adagrad(${learningRate})`;
+      case 'adadelta':
+        return `tf.train.adadelta(${learningRate})`;
+      default:
+        return "'adam'";
+    }
+  };
+  
+  // 生成损失函数代码
+  const generateLossCode = (config) => {
+    if (!config) return "'categoricalCrossentropy'";
+    
+    const { type = 'categoricalCrossentropy' } = config;
+    
+    return `'${type}'`;
   };
   
   // 整体模型定义和图连接验证

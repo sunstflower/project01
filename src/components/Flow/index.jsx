@@ -22,13 +22,17 @@ import Conv2DNode from '../modelAdd/conv2d1';
 import MaxPooling2DNode from '../modelAdd/maxPooling2d';
 import DenseNode from '../modelAdd/dense';
 import TrainButton from '../modelAdd/train';
+import DropoutNode from '../modelAdd/dropout';
+import BatchNormNode from '../modelAdd/batchNorm';
+import FlattenNode from '../modelAdd/flatten';
+import LSTMNode from '../modelAdd/lstm';
 import useStore from '@/store'; 
 
 // Apple风格的样式
 const rfStyle = {
   backgroundColor: '#f5f5f7',
   width: '100%', 
-  height: 'calc(100vh - 64px)', 
+  height: '100%', 
 };
 
 const father = {
@@ -60,28 +64,23 @@ const nodeTypes = {
   maxPooling2d: MaxPooling2DNode,
   dense: DenseNode,
   trainButton: TrainButton,
+  dropout: DropoutNode,
+  batchNorm: BatchNormNode,
+  flatten: FlattenNode,
+  lstm: LSTMNode,
 };
 
 // 允许连接的节点类型组合
 const isValidConnection = (sourceType, targetType) => {
-  // 数据源只能连接到卷积层
+  // 数据源只能连接到处理层
   if (sourceType === 'useData' || sourceType === 'mnist') {
-    return targetType === 'conv2d';
+    return ['conv2d', 'dense', 'flatten', 'lstm'].includes(targetType);
   }
   
-  // 卷积层只能连接到池化层
-  if (sourceType === 'conv2d') {
-    return targetType === 'maxPooling2d';
-  }
-  
-  // 池化层可以连接到卷积层或全连接层
-  if (sourceType === 'maxPooling2d') {
-    return targetType === 'conv2d' || targetType === 'dense';
-  }
-  
-  // 全连接层只能连接到其他全连接层
-  if (sourceType === 'dense') {
-    return targetType === 'dense';
+  // 大多数层可以连接到任何其他处理层
+  const processingLayers = ['conv2d', 'maxPooling2d', 'dense', 'dropout', 'batchNorm', 'flatten', 'lstm'];
+  if (processingLayers.includes(sourceType)) {
+    return processingLayers.includes(targetType);
   }
   
   return false;
@@ -267,6 +266,46 @@ function FlowComponent() {
         },
         position,
       };
+    } else if (type === 'dropout') {
+      nodeId = `dropout-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'dropout',
+        data: { 
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'batchNorm') {
+      nodeId = `batchNorm-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'batchNorm',
+        data: { 
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'flatten') {
+      nodeId = `flatten-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'flatten',
+        data: { 
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'lstm') {
+      nodeId = `lstm-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'lstm',
+        data: { 
+          sequenceId: sequenceId 
+        },
+        position,
+      };
     }
     
     // 添加节点到状态中
@@ -282,7 +321,7 @@ function FlowComponent() {
 
   // 使用ReactDnD处理拖拽
   const [{ isOver }, drop] = useDrop({
-    accept: ['conv2d', 'maxPooling2d', 'dense', 'trainButton', 'useData', 'mnist'],
+    accept: ['conv2d', 'maxPooling2d', 'dense', 'trainButton', 'useData', 'mnist', 'dropout', 'batchNorm', 'flatten', 'lstm'],
     drop(item, monitor) {
       if (!reactFlowInstance) return;
       

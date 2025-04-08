@@ -8,18 +8,26 @@ const MODEL_COMPONENTS = [
   { type: 'mnist', label: 'MNIST Dataset' },
   { type: 'conv2d', label: 'Conv2D Layer' },
   { type: 'maxPooling2d', label: 'MaxPooling2D Layer' },
+  { type: 'avgPooling2d', label: 'AvgPooling2D Layer' },
   { type: 'dense', label: 'Dense Layer' },
+  { type: 'dropout', label: 'Dropout Layer' },
+  { type: 'batchNorm', label: 'Batch Normalization' },
+  { type: 'flatten', label: 'Flatten Layer' },
+  { type: 'lstm', label: 'LSTM Layer' },
+  { type: 'gru', label: 'GRU Layer' },
+  { type: 'activation', label: 'Activation Layer' },
+  { type: 'reshape', label: 'Reshape Layer' },
   { type: 'trainButton', label: 'Train Model' },
 ];
 
 function GeneratorBar() {
   return (
-    <div className="p-4 bg-gray-50 h-full border-r">
-      <h2 className="text-xl font-semibold mb-6 text-gray-800">Model Components</h2>
+    <div className="p-4 bg-gray-50 h-full">
+      <h2 className="text-xl font-semibold mb-4 text-gray-800 sticky top-0 bg-gray-50 py-2 z-10">Model Components</h2>
       <p className="text-sm text-gray-600 mb-4">Drag and drop components to the canvas</p>
       
-      <div className="space-y-4">
-        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold">Data Sources</h3>
+      <div className="space-y-4 pb-20">
+        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold sticky top-16 bg-gray-50 py-1">Data Sources</h3>
         {MODEL_COMPONENTS.slice(0, 2).map((component) => (
           <DraggableComponentWrapper 
             key={component.type} 
@@ -28,7 +36,7 @@ function GeneratorBar() {
           />
         ))}
         
-        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6">Neural Network Layers</h3>
+        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6 sticky top-16 bg-gray-50 py-1">Convolutional Layers</h3>
         {MODEL_COMPONENTS.slice(2, 5).map((component) => (
           <DraggableComponentWrapper 
             key={component.type} 
@@ -37,8 +45,35 @@ function GeneratorBar() {
           />
         ))}
         
-        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6">Training</h3>
-        {MODEL_COMPONENTS.slice(5).map((component) => (
+        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6 sticky top-16 bg-gray-50 py-1">Dense & Regularization</h3>
+        {MODEL_COMPONENTS.slice(5, 8).map((component) => (
+          <DraggableComponentWrapper 
+            key={component.type} 
+            type={component.type} 
+            label={component.label} 
+          />
+        ))}
+        
+        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6 sticky top-16 bg-gray-50 py-1">Recurrent Layers</h3>
+        {MODEL_COMPONENTS.slice(8, 10).map((component) => (
+          <DraggableComponentWrapper 
+            key={component.type} 
+            type={component.type} 
+            label={component.label} 
+          />
+        ))}
+        
+        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6 sticky top-16 bg-gray-50 py-1">Utility Layers</h3>
+        {MODEL_COMPONENTS.slice(10, 13).map((component) => (
+          <DraggableComponentWrapper 
+            key={component.type} 
+            type={component.type} 
+            label={component.label} 
+          />
+        ))}
+        
+        <h3 className="text-xs uppercase tracking-wider text-gray-500 font-semibold mt-6 sticky top-16 bg-gray-50 py-1">Training</h3>
+        {MODEL_COMPONENTS.slice(13).map((component) => (
           <DraggableComponentWrapper 
             key={component.type} 
             type={component.type} 

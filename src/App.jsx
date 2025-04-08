@@ -13,41 +13,26 @@ function App() {
     <DndProvider backend={HTML5Backend}>
       <ReactFlowProvider>
         <Router>
-          <div className="app-container h-full w-full flex flex-col">
-            <Navigation />
-            <div className="flex-1 flex">
-              <div className="w-1/4">
-                <GeneratorBar />
-              </div>
-              <div className="w-3/4">
-                <Routes>
-                  <Route path="/" element={<Look />} />
-                  <Route path="/flow" element={<Flow />} />
-                </Routes>
-              </div>
-            </div>
+          <div className="app-container h-screen w-full flex flex-col overflow-hidden">
+            <Routes>
+              <Route path="/" element={<Look />} />
+              <Route path="/flow" element={
+                <div className="flex h-full w-full overflow-hidden">
+                  <div className="w-64 h-full overflow-y-auto border-r border-gray-200">
+                    <GeneratorBar />
+                  </div>
+                  <div className="flex-1 h-full">
+                    <Flow />
+                  </div>
+                </div>
+              } />
+            </Routes>
           </div>
         </Router>
       </ReactFlowProvider>
     </DndProvider>
   );
 }
-
-// 导航组件（使用按钮）
-const Navigation = () => {
-  const navigate = useNavigate();
-
-  return (
-    <div className="flex space-x-4 mb-8">
-      <button
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        onClick={() => navigate('/flow')}
-      >
-        Flow
-      </button>
-    </div>
-  );
-};
 
 export default App;
 

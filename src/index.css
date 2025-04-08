@@ -6,6 +6,8 @@ body {
     background-color: #f4f4f9;
     margin: 0;
     padding: 0;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .p-8 {
@@ -74,6 +76,26 @@ body {
 
 .left-0 {
     left: 0;
+}
+
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
 }
 
 /* Additional styles for React Flow */

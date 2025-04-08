@@ -1,21 +1,41 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useDrop } from 'react-dnd';
-import Conv2DNode from './Conv2DNode';
-import MaxPooling2DNode from './MaxPooling2DNode'; // 假设你有一个类似的 MaxPooling2DNode 组件
 
-function DropZone({ onAddNode }) {
-  const [, drop] = useDrop(() => ({
-    accept: ['CONV2D_NODE', 'MAX_POOLING2D_NODE'],
-    drop(item) {
-      onAddNode(item.type);
+const DropZone = ({ onAddNode }) => {
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: [
+      'useData',
+      'mnist',
+      'conv2d',
+      'maxPooling2d',
+      'avgPooling2d',
+      'dense',
+      'dropout',
+      'batchNorm',
+      'flatten',
+      'lstm',
+      'gru',
+      'activation',
+      'reshape',
+      'trainButton'
+    ],
+    drop: (item, monitor) => {
+      const offset = monitor.getClientOffset();
+      onAddNode(item.type, offset);
     },
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver(),
+    }),
   }));
 
   return (
-    <div ref={drop} className="mt-4">
-      {/* 这里将显示已添加的节点 */}
-    </div>
+    <div
+      ref={drop}
+      className={`w-full h-full min-h-[500px] ${
+        isOver ? 'bg-blue-50' : 'bg-white'
+      } transition-colors duration-200`}
+    />
   );
-}
+};
 
 export default DropZone;

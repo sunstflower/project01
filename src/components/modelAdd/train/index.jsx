@@ -136,6 +136,65 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig, nodes, edges)
           model.add(tf.layers.dense(denseConfig));
           layerCount++;
           break;
+        case 'dropout':
+          console.log('Adding Dropout layer');
+          model.add(tf.layers.dropout(useStore.getState().dropoutConfigs[node.configIndex]));
+          layerCount++;
+          break;
+        case 'batchNorm':
+          console.log('Adding BatchNormalization layer');
+          model.add(tf.layers.batchNormalization(useStore.getState().batchNormConfigs[node.configIndex]));
+          layerCount++;
+          break;
+        case 'flatten':
+          console.log('Adding Flatten layer');
+          model.add(tf.layers.flatten());
+          hasAddedFlatten = true;
+          layerCount++;
+          break;
+        case 'lstm':
+          if (layerCount === 0) {
+            // 第一个LSTM层需要指定inputShape
+            console.log('Adding first LSTM layer with inputShape');
+            model.add(tf.layers.lstm({
+              inputShape: [null, 28], // 假设输入是序列数据，需要根据实际情况调整
+              ...useStore.getState().lstmConfigs[node.configIndex]
+            }));
+          } else {
+            console.log('Adding LSTM layer');
+            model.add(tf.layers.lstm(useStore.getState().lstmConfigs[node.configIndex]));
+          }
+          layerCount++;
+          break;
+        case 'gru':
+          if (layerCount === 0) {
+            // 第一个GRU层需要指定inputShape
+            console.log('Adding first GRU layer with inputShape');
+            model.add(tf.layers.gru({
+              inputShape: [null, 28], // 假设输入是序列数据，需要根据实际情况调整
+              ...useStore.getState().gruConfigs[node.configIndex]
+            }));
+          } else {
+            console.log('Adding GRU layer');
+            model.add(tf.layers.gru(useStore.getState().gruConfigs[node.configIndex]));
+          }
+          layerCount++;
+          break;
+        case 'activation':
+          console.log('Adding Activation layer');
+          model.add(tf.layers.activation(useStore.getState().activationConfigs[node.configIndex]));
+          layerCount++;
+          break;
+        case 'reshape':
+          console.log('Adding Reshape layer');
+          model.add(tf.layers.reshape(useStore.getState().reshapeConfigs[node.configIndex]));
+          layerCount++;
+          break;
+        case 'avgPooling2d':
+          console.log('Adding AvgPooling2D layer');
+          model.add(tf.layers.averagePooling2d(useStore.getState().avgPooling2dConfigs[node.configIndex]));
+          layerCount++;
+          break;
         default:
           console.warn(`Unknown node type: ${node.type}`);
       }
@@ -226,7 +285,15 @@ async function train(model, data, isCsv) {
 }
 
 function TrainButton() {
-  const { conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData, nodes, edges } = useStore();
+  const { 
+    conv2dConfigs, 
+    maxPooling2dConfigs, 
+    denseConfig, 
+    csvData, 
+    isData, 
+    nodes, 
+    edges
+  } = useStore();
 
   const handleTrainClick = useCallback(async () => {
     let data;

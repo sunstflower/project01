@@ -1,94 +1,93 @@
 import React from 'react';
+import { 
+  FaDatabase, 
+  FaImage, 
+  FaLayerGroup, 
+  FaNetworkWired, 
+  FaPlay,
+  FaTint,
+  FaChartBar,
+  FaCompress,
+  FaExchangeAlt,
+  FaRandom,
+  FaCode,
+  FaExpand,
+  FaCog
+} from 'react-icons/fa';
 
 const DraggableNode = ({ type, label }) => {
-  // 根据节点类型显示不同的图标
-  const getNodeIcon = () => {
+  const getIcon = () => {
     switch (type) {
       case 'useData':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-        );
+        return <FaDatabase className="text-blue-500" />;
       case 'mnist':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <rect x="7" y="7" width="10" height="10" rx="1" ry="1"></rect>
-          </svg>
-        );
+        return <FaImage className="text-purple-500" />;
       case 'conv2d':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="3" y1="9" x2="21" y2="9"></line>
-            <line x1="3" y1="15" x2="21" y2="15"></line>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-            <line x1="15" y1="3" x2="15" y2="21"></line>
-          </svg>
-        );
+        return <FaLayerGroup className="text-green-500" />;
       case 'maxPooling2d':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="4 14 10 14 10 20"></polyline>
-            <polyline points="20 10 14 10 14 4"></polyline>
-            <line x1="14" y1="10" x2="21" y2="3"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
-          </svg>
-        );
+      case 'avgPooling2d':
+        return <FaCompress className="text-orange-500" />;
       case 'dense':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="2" y1="12" x2="22" y2="12"></line>
-            <line x1="12" y1="2" x2="12" y2="22"></line>
-          </svg>
-        );
+        return <FaNetworkWired className="text-red-500" />;
+      case 'dropout':
+        return <FaTint className="text-blue-400" />;
+      case 'batchNorm':
+        return <FaChartBar className="text-yellow-500" />;
+      case 'flatten':
+        return <FaCompress className="text-gray-500" />;
+      case 'lstm':
+      case 'gru':
+        return <FaExchangeAlt className="text-indigo-500" />;
+      case 'activation':
+        return <FaCode className="text-pink-500" />;
+      case 'reshape':
+        return <FaExpand className="text-teal-500" />;
       case 'trainButton':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="13 17 18 12 13 7"></polyline>
-            <polyline points="6 17 11 12 6 7"></polyline>
-          </svg>
-        );
+        return <FaPlay className="text-green-600" />;
       default:
-        return null;
+        return <FaCog className="text-gray-500" />;
     }
   };
 
-  // 根据节点类型确定Apple设计风格的颜色
-  const getNodeColor = () => {
+  const getBackgroundColor = () => {
     switch (type) {
       case 'useData':
-        return 'bg-green-100 text-green-700 border-green-200';
+        return 'bg-blue-50 hover:bg-blue-100';
       case 'mnist':
-        return 'bg-green-100 text-green-700 border-green-200';
+        return 'bg-purple-50 hover:bg-purple-100';
       case 'conv2d':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
+        return 'bg-green-50 hover:bg-green-100';
       case 'maxPooling2d':
-        return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+      case 'avgPooling2d':
+        return 'bg-orange-50 hover:bg-orange-100';
       case 'dense':
-        return 'bg-orange-100 text-orange-700 border-orange-200';
+        return 'bg-red-50 hover:bg-red-100';
+      case 'dropout':
+        return 'bg-blue-50 hover:bg-blue-100';
+      case 'batchNorm':
+        return 'bg-yellow-50 hover:bg-yellow-100';
+      case 'flatten':
+        return 'bg-gray-50 hover:bg-gray-100';
+      case 'lstm':
+      case 'gru':
+        return 'bg-indigo-50 hover:bg-indigo-100';
+      case 'activation':
+        return 'bg-pink-50 hover:bg-pink-100';
+      case 'reshape':
+        return 'bg-teal-50 hover:bg-teal-100';
       case 'trainButton':
-        return 'bg-red-100 text-red-700 border-red-200';
+        return 'bg-green-50 hover:bg-green-100';
       default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
+        return 'bg-gray-50 hover:bg-gray-100';
     }
   };
 
   return (
-    <div 
-      className={`${getNodeColor()} rounded-xl p-3 mb-3 cursor-move flex items-center shadow-sm border 
-      hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-200`}
-    >
-      <div className="mr-3 p-2 rounded-lg bg-white bg-opacity-50">
-        {getNodeIcon()}
+    <div className={`flex items-center p-3 rounded-lg cursor-move transition-colors duration-200 ${getBackgroundColor()}`}>
+      <div className="mr-3 text-xl">
+        {getIcon()}
       </div>
-      <div>
-        <span className="font-medium">{label}</span>
-      </div>
+      <span className="text-sm font-medium text-gray-700">{label}</span>
     </div>
   );
 };
