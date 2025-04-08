@@ -26,6 +26,10 @@ import DropoutNode from '../modelAdd/dropout';
 import BatchNormNode from '../modelAdd/batchNorm';
 import FlattenNode from '../modelAdd/flatten';
 import LSTMNode from '../modelAdd/lstm';
+import ActivationNode from '../modelAdd/activation';
+import AvgPooling2DNode from '../modelAdd/avgPooling2d';
+import GRUNode from '../modelAdd/gru';
+import ReshapeNode from '../modelAdd/reshape';
 import useStore from '@/store'; 
 
 // Apple风格的样式
@@ -68,17 +72,21 @@ const nodeTypes = {
   batchNorm: BatchNormNode,
   flatten: FlattenNode,
   lstm: LSTMNode,
+  activation: ActivationNode,
+  avgPooling2d: AvgPooling2DNode,
+  gru: GRUNode,
+  reshape: ReshapeNode,
 };
 
 // 允许连接的节点类型组合
 const isValidConnection = (sourceType, targetType) => {
   // 数据源只能连接到处理层
   if (sourceType === 'useData' || sourceType === 'mnist') {
-    return ['conv2d', 'dense', 'flatten', 'lstm'].includes(targetType);
+    return ['conv2d', 'dense', 'flatten', 'lstm', 'gru', 'reshape'].includes(targetType);
   }
   
   // 大多数层可以连接到任何其他处理层
-  const processingLayers = ['conv2d', 'maxPooling2d', 'dense', 'dropout', 'batchNorm', 'flatten', 'lstm'];
+  const processingLayers = ['conv2d', 'maxPooling2d', 'avgPooling2d', 'dense', 'dropout', 'batchNorm', 'flatten', 'lstm', 'gru', 'activation', 'reshape'];
   if (processingLayers.includes(sourceType)) {
     return processingLayers.includes(targetType);
   }
@@ -306,6 +314,50 @@ function FlowComponent() {
         },
         position,
       };
+    } else if (type === 'activation') {
+      nodeId = `activation-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'activation',
+        data: { 
+          index: 0,
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'avgPooling2d') {
+      nodeId = `avgPooling2d-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'avgPooling2d',
+        data: { 
+          index: 0,
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'gru') {
+      nodeId = `gru-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'gru',
+        data: { 
+          index: 0,
+          sequenceId: sequenceId 
+        },
+        position,
+      };
+    } else if (type === 'reshape') {
+      nodeId = `reshape-${currentTimestamp}`;
+      newNode = {
+        id: nodeId,
+        type: 'reshape',
+        data: { 
+          index: 0,
+          sequenceId: sequenceId 
+        },
+        position,
+      };
     }
     
     // 添加节点到状态中
@@ -321,7 +373,7 @@ function FlowComponent() {
 
   // 使用ReactDnD处理拖拽
   const [{ isOver }, drop] = useDrop({
-    accept: ['conv2d', 'maxPooling2d', 'dense', 'trainButton', 'useData', 'mnist', 'dropout', 'batchNorm', 'flatten', 'lstm'],
+    accept: ['conv2d', 'maxPooling2d', 'dense', 'trainButton', 'useData', 'mnist', 'dropout', 'batchNorm', 'flatten', 'lstm', 'activation', 'avgPooling2d', 'gru', 'reshape'],
     drop(item, monitor) {
       if (!reactFlowInstance) return;
       
@@ -436,6 +488,10 @@ function FlowComponent() {
             if (n.type === 'maxPooling2d') return '#5856d6';
             if (n.type === 'dense') return '#ff9f0a';
             if (n.type === 'trainButton') return '#ff3b30';
+            if (n.type === 'activation') return '#ff2d55';
+            if (n.type === 'avgPooling2d') return '#5e5ce6';
+            if (n.type === 'gru') return '#bf5af2';
+            if (n.type === 'reshape') return '#30b0c7';
             return '#8e8e93';
           }}
           nodeColor={(n) => {
@@ -444,6 +500,10 @@ function FlowComponent() {
             if (n.type === 'maxPooling2d') return '#c7d2fe';
             if (n.type === 'dense') return '#fed7aa';
             if (n.type === 'trainButton') return '#fca5a5';
+            if (n.type === 'activation') return '#ffb3c1';
+            if (n.type === 'avgPooling2d') return '#c4c1e0';
+            if (n.type === 'gru') return '#e9d5ff';
+            if (n.type === 'reshape') return '#a5f3fc';
             return '#d1d5db';
           }}
         />
