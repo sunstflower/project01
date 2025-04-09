@@ -116,6 +116,14 @@ function FlowComponent() {
     conv2dConfigs,
     maxPooling2dConfigs,
     denseConfig,
+    reshapeConfigs,
+    lstmConfigs,
+    gruConfigs,
+    activationConfigs,
+    avgPooling2dConfigs,
+    dropoutConfigs,
+    batchNormConfigs,
+    flattenConfigs,
   } = useStore();
   
   const [elements, setElements] = useState([]);
@@ -402,15 +410,41 @@ function FlowComponent() {
 
   // 生成TensorFlow.js代码
   const generateCode = useCallback(() => {
+    // 添加调试信息
+    console.log("生成代码 - 当前节点:", elements);
+    console.log("生成代码 - 当前连接:", edges);
+    
     // 验证模型结构
     const validation = validateModelStructure(elements, edges);
+    console.log("验证结果:", validation);
+    
     if (!validation.valid) {
+      console.error("模型验证失败:", validation.message);
       message.error(validation.message);
       return;
     }
     
-    // 从图生成有序的模型结构
+    console.log("模型验证通过");
+    
+    // 添加原始节点中的数据源节点和特殊节点
+    const dataSourceNodes = elements.filter(node => 
+      node.type === 'mnist' || node.type === 'useData'
+    ).map(node => ({
+      type: node.type,
+      config: node.data || { sequenceId: node.data?.sequenceId || 0 }
+    }));
+    
+    console.log("数据源节点:", dataSourceNodes);
+    
+    // 从图生成有序的模型结构（不包含数据源）
     const modelStructure = generateModelStructureFromGraph(elements, edges);
+    console.log("生成的模型结构:", modelStructure);
+    
+    if (modelStructure.length === 0) {
+      console.error("无法生成有效的模型结构");
+      message.error("无法生成有效的模型结构，请确保您的模型连接正确");
+      return;
+    }
     
     // 从配置中填充具体的配置参数
     const detailedStructure = modelStructure.map(node => {
@@ -424,19 +458,47 @@ function FlowComponent() {
         config = maxPooling2dConfigs[index] || {};
       } else if (node.type === 'dense') {
         config = denseConfig;
+      } else if (node.type === 'reshape') {
+        const index = node.config.index;
+        config = reshapeConfigs[index] || {};
+      } else if (node.type === 'lstm') {
+        const index = node.config.index;
+        config = lstmConfigs[index] || {};
+      } else if (node.type === 'gru') {
+        const index = node.config.index;
+        config = gruConfigs[index] || {};
+      } else if (node.type === 'activation') {
+        const index = node.config.index;
+        config = activationConfigs[index] || {};
+      } else if (node.type === 'avgPooling2d') {
+        const index = node.config.index;
+        config = avgPooling2dConfigs[index] || {};
+      } else if (node.type === 'dropout') {
+        const index = node.config.index;
+        config = dropoutConfigs[index] || {};
+      } else if (node.type === 'batchNorm') {
+        const index = node.config.index;
+        config = batchNormConfigs[index] || {};
+      } else if (node.type === 'flatten') {
+        const index = node.config.index;
+        config = flattenConfigs[index] || {};
       }
       
       return {
         type: node.type,
-        config
+        config: { ...node.config, ...config }
       };
     });
     
+    // 添加数据源节点
+    const finalStructure = [...dataSourceNodes, ...detailedStructure];
+    console.log("最终结构:", finalStructure);
+    
     // 生成代码，传入edges参数
-    const code = generateModelCode(detailedStructure, edges);
+    const code = generateModelCode(finalStructure, edges);
     setGeneratedCode(code);
     setIsModalVisible(true);
-  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfig]);
+  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfig, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
 
   // 复制代码到剪贴板
   const copyCodeToClipboard = () => {

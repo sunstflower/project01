@@ -7,6 +7,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import './index.css';
 import Look from './look';
 import GeneratorBar from './components/Dnd/GeneratorBar';
+import '@ant-design/v5-patch-for-react-19';
 
 function App() {
   return (

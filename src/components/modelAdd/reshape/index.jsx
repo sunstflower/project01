@@ -8,7 +8,7 @@ const { Title, Text } = Typography;
 const ReshapeNode = ({ id, data }) => {
   const { reshapeConfigs, updateReshapeConfig } = useStore();
   const config = reshapeConfigs[data.index] || {
-    targetShape: '(None, 784)',
+    targetShape: '(None, 7, 4)',
   };
 
   const [targetShape, setTargetShape] = useState(config.targetShape);
@@ -49,7 +49,7 @@ const ReshapeNode = ({ id, data }) => {
         <Input
           value={targetShape}
           onChange={handleTargetShapeChange}
-          placeholder="例如: (None, 784)"
+          placeholder="例如: (None, 7, 4)"
           style={{ marginTop: 8 }}
         />
 
@@ -60,7 +60,10 @@ const ReshapeNode = ({ id, data }) => {
             重塑输入张量的形状
           </Text>
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            使用 None 表示动态维度，例如 (None, 784) 将输入重塑为二维张量
+            对于时间序列数据，推荐形状: (None, 时间步数, 特征数)
+          </Text>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            例如: (None, 7, 4) 表示批量大小不限，7个时间步，4个特征
           </Text>
         </Space>
       </div>

@@ -4,28 +4,73 @@
 
 // 生成模型代码
 export const generateModelCode = (modelStructure, edges) => {
+    console.log('generateModelCode 接收到的模型结构:', modelStructure);
+    
     if (!modelStructure || !Array.isArray(modelStructure) || modelStructure.length === 0) {
       return '// Please add model components before generating code';
     }
   
-    // 检查是否有MNIST数据源
-    const hasMnistDataset = modelStructure.some(node => node.type === 'mnist');
+    // 定义有效的模型层类型（不包括数据源节点）
+    const validLayerTypes = [
+      'conv2d', 
+      'maxPooling2d', 
+      'avgPooling2d', 
+      'dense', 
+      'dropout', 
+      'batchNorm', 
+      'flatten', 
+      'lstm', 
+      'gru', 
+      'activation', 
+      'reshape'
+    ];
     
-    // 检查是否有CSV数据源
+    // 检查数据源节点类型 - 从原始 modelStructure 中检查，而不是只在有效层中检查
+    const hasMnistDataset = modelStructure.some(node => node.type === 'mnist');
     const hasCsvDataset = modelStructure.some(node => node.type === 'useData');
+    
+    console.log('数据源检测: MNIST =', hasMnistDataset, 'CSV =', hasCsvDataset);
+    
+    // 过滤出有效的模型层（不包括数据源节点）
+    const validModelStructure = modelStructure.filter(node => validLayerTypes.includes(node.type));
+    
+    console.log('有效模型层:', validModelStructure.map(node => node.type).join(', '));
+    
+    if (validModelStructure.length === 0) {
+      return '// Please add valid model components before generating code';
+    }
   
     let code = `
   // TensorFlow.js Model Definition
   const createModel = () => {
+    console.log('Creating model with structure:', ${JSON.stringify(validModelStructure)});
+    
     const model = tf.sequential();
+    
+    // 设置输入特征数量 - 根据您的数据调整这个值
+    const inputFeatures = 4; // 降水量、最高温度、最低温度、风速
     
   `;
   
     // 根据sequenceId排序的层
-    const sortedLayers = [...modelStructure].sort((a, b) => a.config.sequenceId - b.config.sequenceId);
-  
+    const sortedLayers = [...validModelStructure].sort((a, b) => {
+      // 如果 sequenceId 不存在或相等，使用 configIndex 作为备选
+      const aSeq = a.config.sequenceId !== undefined ? a.config.sequenceId : (a.config.index || 0);
+      const bSeq = b.config.sequenceId !== undefined ? b.config.sequenceId : (b.config.index || 0);
+      return aSeq - bSeq;
+    });
+    
+    // 添加调试信息
+    code += `    // Model structure (sorted by sequenceId): ${JSON.stringify(sortedLayers)}\n`;
+    
     // 添加层
     sortedLayers.forEach((layer, index) => {
+      // 添加更多调试信息
+      code += `    // Processing layer ${index}: ${layer.type}\n`;
+      if (index === 0) {
+        code += `    // This is the first layer and requires inputShape\n`;
+      }
+      
       switch (layer.type) {
         case 'conv2d':
           code += generateConv2DCode(layer.config, index === 0);
@@ -64,7 +109,7 @@ export const generateModelCode = (modelStructure, edges) => {
           code += generateActivationCode(layer.config);
           break;
         case 'reshape':
-          code += generateReshapeCode(layer.config);
+          code += generateReshapeCode(layer.config, index === 0);
           break;
         default:
           throw new Error(`Unknown layer type: ${layer.type}`);
@@ -75,8 +120,8 @@ export const generateModelCode = (modelStructure, edges) => {
     code += `
     // Compile model
     model.compile({
-      optimizer: ${generateOptimizerCode(modelStructure.find(layer => layer.type === 'optimizer')?.config) || "'adam'"},
-      loss: ${generateLossCode(modelStructure.find(layer => layer.type === 'loss')?.config) || "'categoricalCrossentropy'"},
+      optimizer: ${generateOptimizerCode(validModelStructure.find(layer => layer.type === 'optimizer')?.config) || "'adam'"},
+      loss: ${generateLossCode(validModelStructure.find(layer => layer.type === 'loss')?.config) || "'categoricalCrossentropy'"},
       metrics: ['accuracy'],
     });
     
@@ -237,6 +282,121 @@ export const generateModelCode = (modelStructure, edges) => {
         loss: evaluation[0].dataSync()[0],
         accuracy: evaluation[1].dataSync()[0]
       });
+      ` : hasCsvDataset ? `
+      // CSV Data Processing Functions
+      
+      // 将CSV数据转换为张量
+      const createTensorsFromCsvData = (data, timeSteps = 7, predictSteps = 1) => {
+        // 假设data是一个已经加载并解析好的CSV数据数组
+        // 数据结构: [{date: '2012/1/1', precipitation: 0, temp_max: 12.8, temp_min: 5, wind: 4.7, weather: 'drizzle'}, ...]
+        
+        console.log('Processing CSV data with length:', data.length);
+        
+        // 提取数值特征
+        const features = data.map(row => [
+          parseFloat(row.precipitation),
+          parseFloat(row.temp_max),
+          parseFloat(row.temp_min),
+          parseFloat(row.wind)
+        ]);
+        
+        // 数据归一化
+        const { normalizedFeatures, mins, maxs } = normalizeData(features);
+        
+        // 创建序列数据
+        const sequences = [];
+        const targets = [];
+        
+        // 对于每个可能的序列
+        for (let i = 0; i <= normalizedFeatures.length - timeSteps - predictSteps; i++) {
+          // 提取输入序列
+          const sequence = normalizedFeatures.slice(i, i + timeSteps);
+          sequences.push(sequence);
+          
+          // 提取目标值 (例如，预测下一个时间步的最高温度)
+          const target = normalizedFeatures[i + timeSteps + predictSteps - 1][1]; // 索引1是temp_max
+          targets.push(target);
+        }
+        
+        console.log('Created sequences:', sequences.length);
+        
+        // 创建张量
+        const xs = tf.tensor3d(sequences);
+        const ys = tf.tensor2d(targets.map(t => [t]));
+        
+        return {
+          xs,
+          labels: ys,
+          mins,
+          maxs
+        };
+      };
+      
+      // 数据归一化函数
+      const normalizeData = (data) => {
+        // 找到每个特征的最小值和最大值
+        const mins = Array(data[0].length).fill(Number.MAX_SAFE_INTEGER);
+        const maxs = Array(data[0].length).fill(Number.MIN_SAFE_INTEGER);
+        
+        data.forEach(row => {
+          row.forEach((val, i) => {
+            if (val < mins[i]) mins[i] = val;
+            if (val > maxs[i]) maxs[i] = val;
+          });
+        });
+        
+        // 归一化数据
+        const normalizedFeatures = data.map(row => {
+          return row.map((val, i) => {
+            return (val - mins[i]) / (maxs[i] - mins[i]);
+          });
+        });
+        
+        return { normalizedFeatures, mins, maxs };
+      };
+      
+      // 加载CSV数据
+      // 注意: 实际使用时，你需要替换为你的CSV数据加载逻辑
+      const loadCsvData = async () => {
+        // 这里应该包含实际加载CSV数据的代码
+        // 例如使用 fetch 加载文件，或者从输入字段获取
+        
+        // 示例假数据
+        const sampleData = [];
+        for (let i = 0; i < 1462; i++) {
+          const date = new Date(2012, 0, 1);
+          date.setDate(date.getDate() + i);
+          
+          sampleData.push({
+            date: \`\${date.getFullYear()}/\${date.getMonth()+1}/\${date.getDate()}\`,
+            precipitation: Math.random() * 20,
+            temp_max: 10 + Math.random() * 10,
+            temp_min: Math.random() * 8,
+            wind: Math.random() * 10,
+            weather: ['rain', 'sun', 'drizzle', 'cloudy'][Math.floor(Math.random() * 4)]
+          });
+        }
+        
+        console.log('Loaded sample CSV data with length:', sampleData.length);
+        return sampleData;
+      };
+      
+      // 执行数据加载和训练
+      try {
+        // 加载CSV数据
+        const csvData = await loadCsvData();
+        
+        // 创建张量数据
+        const timeSteps = 7; // 使用前7天数据预测
+        const trainData = createTensorsFromCsvData(csvData, timeSteps);
+        
+        // 训练模型
+        const history = await trainModel(model, trainData);
+        
+        console.log('Training complete with history:', history);
+      } catch (error) {
+        console.error('Error processing CSV data:', error);
+      }
       ` : `
       // TODO: Load your data here
       // const trainData = await loadData();
@@ -366,7 +526,11 @@ export const generateModelCode = (modelStructure, edges) => {
     if (isFirstLayer) {
       // 为第一层添加inputShape
       code += `  model.add(tf.layers.lstm({\n`;
-      code += `    inputShape: [null, 28],\n`; // 假设输入是序列数据，需要根据实际情况调整
+      
+      // 使用更通用的输入形状设置，更适用于 CSV 数据
+      // 假设输入是 [样本数, 时间步数, 特征维度]
+      // 这里我们设置为 [null, 特征维度]，允许任意长度的序列
+      code += `    inputShape: [null, inputFeatures],\n`; // 使用动态特征数量
     } else {
       code += `  model.add(tf.layers.lstm({\n`;
     }
@@ -405,7 +569,9 @@ export const generateModelCode = (modelStructure, edges) => {
     if (isFirstLayer) {
       // 为第一层添加inputShape
       code += `  model.add(tf.layers.gru({\n`;
-      code += `    inputShape: [null, 28],\n`; // 假设输入是序列数据，需要根据实际情况调整
+      
+      // 使用更通用的输入形状设置，更适用于 CSV 数据
+      code += `    inputShape: [null, inputFeatures],\n`; // 使用动态特征数量
     } else {
       code += `  model.add(tf.layers.gru({\n`;
     }
@@ -442,12 +608,55 @@ export const generateModelCode = (modelStructure, edges) => {
   };
   
   // 生成Reshape层代码
-  const generateReshapeCode = (config) => {
-    const { targetShape = [28, 28, 1] } = config || {};
+  const generateReshapeCode = (config, isFirstLayer) => {
+    const { targetShape = '(None, 7, 4)' } = config || {};
+    
+    console.log('Reshape config:', config);
+    console.log('Target shape (original):', targetShape, typeof targetShape);
+    
+    // 解析目标形状字符串，例如 "(None, 7, 4)" 或 "(28, 28, 1)"
+    let parsedShape;
+    if (typeof targetShape === 'string') {
+      // 移除括号并分割字符串
+      parsedShape = targetShape.replace(/[()]/g, '').split(',').map(item => {
+        item = item.trim();
+        // 处理 "None" 值，在 TensorFlow.js 中使用 null 表示
+        return item === 'None' ? 'null' : parseInt(item, 10);
+      });
+      
+      console.log('Parsed shape after string processing:', parsedShape);
+    } else if (Array.isArray(targetShape)) {
+      parsedShape = targetShape;
+      console.log('Target shape is already an array:', parsedShape);
+    } else {
+      // 默认形状
+      parsedShape = [null, 7, 4];
+      console.log('Using default shape:', parsedShape);
+    }
     
     let code = `  // Add Reshape layer\n`;
-    code += `  model.add(tf.layers.reshape({\n`;
-    code += `    targetShape: [${targetShape.join(', ')}]\n`;
+    
+    // 如果是第一层，需要添加 inputShape
+    if (isFirstLayer) {
+      code += `  console.log('Adding Reshape as first layer with inputShape=[inputFeatures]');\n`;
+      code += `  // Reshape as first layer requires inputShape\n`;
+      code += `  model.add(tf.layers.reshape({\n`;
+      
+      // 确保设置正确的 inputShape
+      // 对于 CSV 数据，输入应该是一维数组，长度为特征数量
+      code += `    inputShape: [inputFeatures],\n`;
+      
+      // 确保 targetShape 是适当的格式
+      code += `    targetShape: [${parsedShape.join(', ')}]\n`;
+    } else {
+      // 不是第一层
+      code += `  console.log('Adding Reshape layer (not first)');\n`;
+      code += `  model.add(tf.layers.reshape({\n`;
+      
+      // 目标形状
+      code += `    targetShape: [${parsedShape.join(', ')}]\n`;
+    }
+    
     code += `  }));\n\n`;
     
     return code;
@@ -504,6 +713,35 @@ export const generateModelCode = (modelStructure, edges) => {
       return { valid: false, message: 'Model is empty, please add at least one component' };
     }
   
+    // 定义有效的模型层类型
+    const validLayerTypes = [
+      'conv2d',
+      'maxPooling2d',
+      'avgPooling2d',
+      'dense',
+      'dropout',
+      'batchNorm',
+      'flatten',
+      'lstm',
+      'gru',
+      'activation',
+      'reshape',
+      'mnist',
+      'useData'
+    ];
+    
+    // 过滤出有效的模型层节点
+    const validNodes = nodes.filter(node => validLayerTypes.includes(node.type));
+    
+    // 输出调试信息
+    console.log('所有节点:', nodes.map(n => `${n.id}(${n.type})`).join(', '));
+    console.log('有效节点:', validNodes.map(n => `${n.id}(${n.type})`).join(', '));
+    
+    // 如果没有有效的模型层节点，返回错误
+    if (validNodes.length === 0) {
+      return { valid: false, message: 'Model is empty, please add at least one valid component' };
+    }
+
     // 检查是否有未连接的节点
     const connectedNodes = new Set();
     edges.forEach(edge => {
@@ -511,16 +749,25 @@ export const generateModelCode = (modelStructure, edges) => {
       connectedNodes.add(edge.target);
     });
     
+    console.log('已连接节点:', Array.from(connectedNodes).join(', '));
+    
     // 如果只有一个节点，不需要检查连接
-    if (nodes.length === 1) {
+    if (validNodes.length === 1) {
       return { valid: true };
     }
     
-    // 检查是否所有非第一个节点都已连接
-    const unconnectedNodes = nodes.filter((node, index) => {
-      // 第一个节点可以没有入边
-      return index > 0 && !connectedNodes.has(node.id);
+    // 检查是否所有非数据源节点都已连接
+    // 只检查有效的模型层节点
+    const unconnectedNodes = validNodes.filter(node => {
+      // 数据源节点可以没有入边
+      if (node.type === 'mnist' || node.type === 'useData') {
+        return false;
+      }
+      // 其他节点必须有连接
+      return !connectedNodes.has(node.id);
     });
+    
+    console.log('未连接的有效节点:', unconnectedNodes.map(n => `${n.id}(${n.type})`).join(', '));
     
     if (unconnectedNodes.length > 0) {
       return {
@@ -528,155 +775,189 @@ export const generateModelCode = (modelStructure, edges) => {
         message: `Unconnected nodes found: ${unconnectedNodes.map(n => n.type).join(', ')}`
       };
     }
-  
-    // 验证层的顺序和连接
-    const layerOrder = nodes.map(node => node.type);
-    let hasConvLayer = false;
-    let hasMaxPoolingAfterConv = false;
-  
-    // 构建邻接表
-    const adjacencyList = {};
-    nodes.forEach(node => {
-      adjacencyList[node.id] = [];
-    });
-    
-    edges.forEach(edge => {
-      adjacencyList[edge.source].push(edge.target);
-    });
-  
-    // 验证每个层的连接
-    for (let i = 0; i < layerOrder.length; i++) {
-      const node = nodes[i];
-      const layerType = node.type;
-      
-      // 检查输入层
-      if (!edges.some(e => e.target === node.id)) {
-        if (layerType !== 'mnist' && layerType !== 'useData') {
-          return {
-            valid: false,
-            message: `Invalid input layer type: ${layerType}`
-          };
-        }
-      }
-      
-      // 检查卷积层和池化层的关系
-      if (layerType === 'maxPooling2d') {
-        const prevLayer = nodes.find(n => 
-          edges.some(e => e.source === n.id && e.target === node.id)
-        );
-        
-        if (!prevLayer || prevLayer.type !== 'conv2d') {
-          return {
-            valid: false,
-            message: 'MaxPooling2D layer must come after a Conv2D layer'
-          };
-        }
-      }
-      
-      // 检查Dense层的连接
-      if (layerType === 'dense') {
-        const prevLayer = nodes.find(n => 
-          edges.some(e => e.source === n.id && e.target === node.id)
-        );
-        
-        if (prevLayer && (prevLayer.type === 'conv2d' || prevLayer.type === 'maxPooling2d')) {
-          // 这里不需要验证，因为我们在生成代码时会自动添加Flatten层
-        }
-      }
+
+    // 检查是否已进行连接
+    const hasConnection = edges.length > 0;
+    if (!hasConnection) {
+      return { valid: false, message: 'No connections between nodes, please connect your layers' };
     }
-    
+
     return { valid: true };
   };
   
   // 从图结构生成模型层次结构
-  export const generateModelStructureFromGraph = (nodes, edges) => {
-    // 如果没有节点，返回空数组
-    if (!nodes || nodes.length === 0) {
-      return [];
+  export function generateModelStructureFromGraph(nodes, edges) {
+    // 定义有效的模型层类型（不包括数据源和训练按钮）
+    const validModelLayerTypes = [
+        'conv2d',
+        'maxPooling2d',
+        'avgPooling2d',
+        'dense',
+        'dropout',
+        'batchNorm',
+        'flatten',
+        'lstm',
+        'gru',
+        'activation',
+        'reshape'
+    ];
+    
+    // 数据源节点类型
+    const dataSourceTypes = ['mnist', 'useData'];
+    
+    // 所有有效的节点类型
+    const validNodeTypes = [...validModelLayerTypes, ...dataSourceTypes];
+
+    // 过滤出有效的节点（模型层和数据源）
+    const validNodes = nodes.filter(node => validNodeTypes.includes(node.type));
+    
+    console.log('生成模型结构 - 有效节点:', validNodes.map(n => `${n.id}(${n.type})`).join(', '));
+    
+    // 如果没有有效的节点，返回空数组
+    if (validNodes.length === 0) {
+        console.warn('没有找到有效的模型层节点');
+        return [];
     }
     
-    // 创建邻接表表示图
+    // 过滤出模型层节点（不包括数据源）
+    const modelLayerNodes = validNodes.filter(node => validModelLayerTypes.includes(node.type));
+    
+    if (modelLayerNodes.length === 0) {
+        console.warn('没有找到有效的模型层节点，只有数据源节点');
+        return [];
+    }
+
+    // 创建邻接表来表示节点之间的连接关系
     const adjacencyList = {};
-    nodes.forEach(node => {
-      adjacencyList[node.id] = {
-        node,
-        next: [],
-      };
+    validNodes.forEach(node => {
+        adjacencyList[node.id] = [];
     });
+
+    // 找出有效的边（连接有效节点的边）
+    const validEdges = edges.filter(edge => 
+        validNodes.some(n => n.id === edge.source) && 
+        validNodes.some(n => n.id === edge.target)
+    );
     
-    // 填充邻接表的next数组
-    edges.forEach(edge => {
-      if (adjacencyList[edge.source]) {
-        adjacencyList[edge.source].next.push(edge.target);
-      }
-    });
+    console.log('有效边:', validEdges.map(e => `${e.source} -> ${e.target}`).join(', '));
     
-    // 找到没有入边的节点(源节点)
-    const inDegree = {};
-    nodes.forEach(node => {
-      inDegree[node.id] = 0;
-    });
-    
-    edges.forEach(edge => {
-      inDegree[edge.target]++;
-    });
-    
-    const sources = nodes
-      .filter(node => inDegree[node.id] === 0)
-      .map(node => node.id);
-    
-    // 如果没有源节点，使用第一个节点作为起点
-    const startNode = sources.length > 0 ? sources[0] : nodes[0].id;
-    
-    // 使用BFS遍历图获取有序模型结构
-    const modelStructure = [];
-    const visited = new Set();
-    const queue = [startNode];
-    
-    // 用于跟踪每种类型的节点数量
-    const typeCounts = {
-      conv2d: 0,
-      maxPooling2d: 0,
-      dense: 0
-    };
-    
-    while (queue.length > 0) {
-      const currentId = queue.shift();
-      
-      if (visited.has(currentId)) continue;
-      visited.add(currentId);
-      
-      const current = adjacencyList[currentId];
-      if (!current) continue;
-      
-      const { node } = current;
-      
-      // 只添加实际的层节点，跳过数据源节点
-      if (node.type !== 'mnist' && node.type !== 'useData') {
-        // 更新类型计数
-        typeCounts[node.type]++;
-        
-        // 创建新的配置对象，使用正确的索引和序列ID
-        const config = {
-          ...node.data,
-          index: typeCounts[node.type] - 1, // 使用0-based索引
-          sequenceId: node.data.sequenceId // 添加序列ID
-        };
-        
-        modelStructure.push({
-          type: node.type,
-          config
-        });
-      }
-      
-      // 将所有未访问的邻居加入队列
-      current.next.forEach(nextId => {
-        if (!visited.has(nextId)) {
-          queue.push(nextId);
+    if (validEdges.length === 0) {
+        console.warn('没有找到有效的连接边');
+        return [];
+    }
+
+    // 填充邻接表
+    validEdges.forEach(edge => {
+        if (adjacencyList[edge.source]) {
+            adjacencyList[edge.source].push(edge.target);
         }
-      });
+    });
+    
+    console.log('邻接表:', adjacencyList);
+
+    // 找到所有入度为0的节点（起始节点）
+    const inDegree = {};
+    validNodes.forEach(node => {
+        inDegree[node.id] = 0;
+    });
+    
+    validEdges.forEach(edge => {
+        if (inDegree[edge.target] !== undefined) {
+            inDegree[edge.target]++;
+        }
+    });
+    
+    console.log('节点入度:', Object.entries(inDegree).map(([id, degree]) => `${id}: ${degree}`).join(', '));
+
+    // 找出所有入度为0的节点作为起始点
+    let startNodes = validNodes
+        .filter(node => inDegree[node.id] === 0)
+        .map(node => node.id);
+    
+    // 如果没有入度为0的节点，但有数据源节点，则使用数据源节点作为起始点
+    if (startNodes.length === 0) {
+        const dataNodes = validNodes.filter(node => dataSourceTypes.includes(node.type));
+        if (dataNodes.length > 0) {
+            console.log('使用数据源节点作为起始点:', dataNodes.map(n => n.id).join(', '));
+            startNodes = dataNodes.map(node => node.id);
+        } else {
+            console.warn('找不到有效的起始节点');
+            return [];
+        }
     }
     
-    // 根据sequenceId排序
-    return modelStructure.sort((a, b) => a.config.sequenceId - b.config.sequenceId);
-  }; 
+    console.log('找到的起始节点:', startNodes.join(', '));
+
+    // 使用BFS遍历图，保持节点的添加顺序
+    const visited = new Set();
+    const queue = [...startNodes];
+    const modelStructure = [];
+    const typeCounts = {};
+
+    console.log('开始BFS遍历，起始队列:', queue);
+
+    while (queue.length > 0) {
+        const currentId = queue.shift();
+        
+        if (visited.has(currentId)) {
+            console.log(`节点 ${currentId} 已访问过，跳过`);
+            continue;
+        }
+        
+        console.log(`处理节点: ${currentId}`);
+        visited.add(currentId);
+
+        const current = validNodes.find(n => n.id === currentId);
+        if (!current) {
+            console.log(`找不到节点 ${currentId}，跳过`);
+            continue;
+        }
+
+        // 只添加模型层节点到最终模型结构中，跳过数据源节点
+        if (validModelLayerTypes.includes(current.type)) {
+            // 更新类型计数
+            if (typeCounts[current.type] === undefined) {
+                typeCounts[current.type] = 0;
+            }
+            typeCounts[current.type]++;
+            
+            // 创建新的配置对象
+            const config = {
+                ...current.data,
+                index: current.data.index !== undefined ? current.data.index : (typeCounts[current.type] - 1),
+                sequenceId: current.data.sequenceId
+            };
+            
+            modelStructure.push({
+                type: current.type,
+                config
+            });
+            
+            console.log(`添加节点 ${current.id}(${current.type}) 到模型结构`);
+        } else {
+            console.log(`跳过数据源节点 ${current.id}(${current.type})`);
+        }
+
+        // 将当前节点的所有未访问的邻居加入队列
+        const neighbors = adjacencyList[currentId] || [];
+        console.log(`节点 ${currentId} 的邻居:`, neighbors);
+        
+        neighbors.forEach(neighborId => {
+            if (!visited.has(neighborId)) {
+                queue.push(neighborId);
+                console.log(`将邻居 ${neighborId} 加入队列`);
+            } else {
+                console.log(`邻居 ${neighborId} 已访问过，不加入队列`);
+            }
+        });
+    }
+
+    // 如果只有数据源节点被访问了，但没有模型层节点，返回空数组
+    if (modelStructure.length === 0) {
+        console.warn('没有有效的模型层节点被添加到结构中');
+        return [];
+    }
+
+    console.log('最终模型结构:', modelStructure);
+    return modelStructure;
+  } 
