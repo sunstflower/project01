@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { Handle } from '@xyflow/react';
-import { Card, InputNumber, Typography, Tooltip, Switch, Divider } from 'antd';
+import { Handle, Position } from '@xyflow/react';
 import useStore from '@/store';
 
-const { Title, Text } = Typography;
-
-const BatchNormNode = ({ id, data }) => {
+function BatchNormNode({ data }) {
   const { batchNormConfigs, updateBatchNormConfig } = useStore();
-  const config = batchNormConfigs[data.index] || {
+  const configIndex = data.index || 0;
+  const config = batchNormConfigs[configIndex] || {
     axis: -1,
     momentum: 0.99,
     epsilon: 0.001,
@@ -20,112 +18,140 @@ const BatchNormNode = ({ id, data }) => {
   const [center, setCenter] = useState(config.center);
   const [scale, setScale] = useState(config.scale);
 
-  const handleMomentumChange = (value) => {
-    if (value !== null) {
+  const handleMomentumChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value >= 0 && value <= 1) {
       setMomentum(value);
-      updateBatchNormConfig(data.index, { momentum: value });
+      updateBatchNormConfig(configIndex, { ...config, momentum: value });
     }
   };
 
-  const handleEpsilonChange = (value) => {
-    if (value !== null) {
+  const handleEpsilonChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value >= 0.0001 && value <= 0.1) {
       setEpsilon(value);
-      updateBatchNormConfig(data.index, { epsilon: value });
+      updateBatchNormConfig(configIndex, { ...config, epsilon: value });
     }
   };
 
-  const handleCenterChange = (checked) => {
+  const handleCenterChange = (e) => {
+    const checked = e.target.checked;
     setCenter(checked);
-    updateBatchNormConfig(data.index, { center: checked });
+    updateBatchNormConfig(configIndex, { ...config, center: checked });
   };
 
-  const handleScaleChange = (checked) => {
+  const handleScaleChange = (e) => {
+    const checked = e.target.checked;
     setScale(checked);
-    updateBatchNormConfig(data.index, { scale: checked });
+    updateBatchNormConfig(configIndex, { ...config, scale: checked });
   };
 
   return (
-    <Card
-      title={<Title level={5}>Batch Normalization</Title>}
-      size="small"
-      style={{
-        width: 280,
-        borderRadius: '12px',
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-        backgroundColor: '#fdfdfd',
-        borderColor: '#e0e7ff', // Light indigo border
-      }}
-      styles={{
-        header: {
-          backgroundColor: '#e0e7ff',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-        },
-      }}
-    >
+    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-indigo-100">
+      <div className="text-lg font-medium text-gray-800 mb-4 bg-indigo-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
+        Batch Normalization 层
+      </div>
+      
       <Handle
         type="target"
-        position="left"
-        style={{ background: '#818cf8', width: '10px', height: '10px' }}
+        position={Position.Top}
+        className="w-4 h-4 bg-indigo-400 rounded-full"
       />
-
-      <div style={{ padding: '8px 0' }}>
-        <Tooltip title="用于计算指数移动平均值的动量">
-          <Text strong>动量:</Text>
-          <InputNumber
-            min={0}
-            max={1}
-            step={0.01}
+      
+      <div className="space-y-5">
+        <div>
+          <label 
+            className="block text-sm font-medium text-gray-700 mb-1" 
+            title="用于计算指数移动平均值的动量"
+          >
+            动量:
+          </label>
+          <input 
+            type="number" 
+            min="0" 
+            max="1" 
+            step="0.01"
             value={momentum}
             onChange={handleMomentumChange}
-            style={{ width: '100%', marginTop: 8 }}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           />
-        </Tooltip>
-
-        <Divider style={{ margin: '12px 0' }} />
+          <p className="mt-1 text-xs text-gray-500">范围: 0-1</p>
+        </div>
         
-        <Tooltip title="添加到方差的小常数，避免除零">
-          <Text strong>Epsilon:</Text>
-          <InputNumber
-            min={0.0001}
-            max={0.1}
-            step={0.0001}
+        <div className="border-t border-gray-200 pt-4">
+          <label 
+            className="block text-sm font-medium text-gray-700 mb-1" 
+            title="添加到方差的小常数，避免除零"
+          >
+            Epsilon:
+          </label>
+          <input 
+            type="number" 
+            min="0.0001" 
+            max="0.1" 
+            step="0.0001"
             value={epsilon}
             onChange={handleEpsilonChange}
-            style={{ width: '100%', marginTop: 8 }}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           />
-        </Tooltip>
-
-        <Divider style={{ margin: '12px 0' }} />
+          <p className="mt-1 text-xs text-gray-500">范围: 0.0001-0.1</p>
+        </div>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Tooltip title="是否将偏移参数添加到归一化的张量">
-            <Text strong>Center:</Text>
-          </Tooltip>
-          <Switch checked={center} onChange={handleCenterChange} />
+        <div className="border-t border-gray-200 pt-4">
+          <div className="flex justify-between items-center mb-3">
+            <label 
+              className="text-sm font-medium text-gray-700" 
+              title="是否将偏移参数添加到归一化的张量"
+            >
+              Center:
+            </label>
+            <div className="relative inline-block w-10 align-middle select-none">
+              <input 
+                type="checkbox" 
+                id="center" 
+                checked={center} 
+                onChange={handleCenterChange}
+                className="sr-only"
+              />
+              <div className={`block w-10 h-6 rounded-full ${center ? 'bg-indigo-400' : 'bg-gray-300'}`}></div>
+              <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${center ? 'transform translate-x-4' : ''}`}></div>
+            </div>
+          </div>
+          
+          <div className="flex justify-between items-center">
+            <label 
+              className="text-sm font-medium text-gray-700" 
+              title="是否将缩放参数应用于归一化的张量"
+            >
+              Scale:
+            </label>
+            <div className="relative inline-block w-10 align-middle select-none">
+              <input 
+                type="checkbox" 
+                id="scale" 
+                checked={scale} 
+                onChange={handleScaleChange}
+                className="sr-only"
+              />
+              <div className={`block w-10 h-6 rounded-full ${scale ? 'bg-indigo-400' : 'bg-gray-300'}`}></div>
+              <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${scale ? 'transform translate-x-4' : ''}`}></div>
+            </div>
+          </div>
         </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <Tooltip title="是否将缩放参数应用于归一化的张量">
-            <Text strong>Scale:</Text>
-          </Tooltip>
-          <Switch checked={scale} onChange={handleScaleChange} />
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            标准化每个批次的激活以加速训练并提高模型稳定性
-          </Text>
+        
+        <div className="border-t border-gray-200 pt-3 text-sm text-gray-500">
+          标准化每个批次的激活以加速训练并提高模型稳定性
         </div>
       </div>
-
+      
       <Handle
         type="source"
-        position="right"
-        style={{ background: '#818cf8', width: '10px', height: '10px' }}
+        position={Position.Bottom}
+        id="a"
+        className="w-4 h-4 bg-indigo-400 rounded-full"
       />
-    </Card>
+    </div>
   );
-};
+}
 
 export default BatchNormNode; 

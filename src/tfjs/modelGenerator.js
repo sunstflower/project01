@@ -734,12 +734,28 @@ export const generateModelCode = (modelStructure, edges) => {
   
   // 生成AvgPooling2D层代码
   const generateAvgPooling2DCode = (config) => {
-    const { poolSize = [2, 2], strides = [2, 2], padding = 'valid' } = config || {};
+    const { poolSize = '(2, 2)', strides = '(2, 2)', padding = 'valid' } = config || {};
+    
+    console.log('AvgPooling2D config:', config);
+    
+    // 解析poolSize和strides，支持字符串格式 "(2, 2)" 或数组格式 [2, 2]
+    let parsedPoolSize = poolSize;
+    let parsedStrides = strides;
+    
+    // 处理字符串格式的poolSize
+    if (typeof poolSize === 'string') {
+      parsedPoolSize = poolSize.replace(/[()]/g, '').split(',').map(item => parseInt(item.trim(), 10));
+    }
+    
+    // 处理字符串格式的strides
+    if (typeof strides === 'string') {
+      parsedStrides = strides.replace(/[()]/g, '').split(',').map(item => parseInt(item.trim(), 10));
+    }
     
     let code = `  // Add AveragePooling2D layer\n`;
     code += `  model.add(tf.layers.averagePooling2d({\n`;
-    code += `    poolSize: [${poolSize[0]}, ${poolSize[1]}],\n`;
-    code += `    strides: [${strides[0]}, ${strides[1]}],\n`;
+    code += `    poolSize: [${parsedPoolSize[0] || 2}, ${parsedPoolSize[1] || 2}],\n`;
+    code += `    strides: [${parsedStrides[0] || 2}, ${parsedStrides[1] || 2}],\n`;
     code += `    padding: '${padding}'\n`;
     code += `  }));\n\n`;
     

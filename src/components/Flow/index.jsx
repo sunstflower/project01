@@ -13,7 +13,6 @@ import {
 } from '@xyflow/react';
 import './dist.css';
 import { useDrop } from 'react-dnd';
-import { Modal, Button, message } from 'antd';
 import { generateModelCode, validateModelStructure, generateModelStructureFromGraph } from '@/tfjs/modelGenerator';
 
 import UseData from '../UseData';
@@ -32,31 +31,32 @@ import GRUNode from '../modelAdd/gru';
 import ReshapeNode from '../modelAdd/reshape';
 import useStore from '@/store'; 
 
-// Apple风格的样式
+// 现代风格的样式
 const rfStyle = {
   backgroundColor: '#f5f5f7',
   width: '100%', 
-  height: '100%', 
+  height: '90vh', // 增加高度到90vh
 };
 
 const father = {
     position: 'relative', 
-    height: '100%', 
-    width: '100%' 
+    height: '90vh', // 增加高度到90vh
+    width: '100%',
+    minHeight: '700px',
 }
 
-// 自定义边样式 - Apple风格
+// 自定义边样式
 const edgeOptions = {
   animated: true,
   style: {
-    stroke: '#007aff',
+    stroke: '#3b82f6',
     strokeWidth: 2,
   },
 };
 
-// 自定义连接线选项 - Apple风格
+// 自定义连接线选项
 const connectionLineStyle = {
-  stroke: '#007aff',
+  stroke: '#3b82f6',
   strokeWidth: 2,
 };
 
@@ -144,7 +144,8 @@ function FlowComponent() {
     
     // 验证连接是否有效
     if (!isValidConnection(sourceNode.type, targetNode.type)) {
-      message.error(`Cannot connect ${sourceNode.type} to ${targetNode.type}`);
+      // 使用原生alert代替antd的message
+      alert(`Cannot connect ${sourceNode.type} to ${targetNode.type}`);
       return;
     }
     
@@ -153,7 +154,7 @@ function FlowComponent() {
       ...params,
       type: 'smoothstep',
       animated: true,
-      style: { stroke: '#007aff' }
+      style: { stroke: '#3b82f6' }
     }, eds));
     
   }, [elements]);
@@ -198,13 +199,135 @@ function FlowComponent() {
           target: newNode.id,
           type: 'smoothstep',
           animated: true,
-          style: { stroke: '#007aff' }
+          style: { stroke: '#3b82f6' }
         }];
       }
     }
     
     return [];
   };
+
+  // 处理节点删除
+  const onNodeDelete = useCallback((nodes) => {
+    nodes.forEach(node => {
+      removeNode(node.id);
+    });
+  }, [removeNode]);
+
+  // 生成TensorFlow.js代码
+  const generateCode = useCallback(() => {
+    // 添加调试信息
+    console.log("生成代码 - 当前节点:", elements);
+    console.log("生成代码 - 当前连接:", edges);
+    
+    // 验证模型结构
+    const validation = validateModelStructure(elements, edges);
+    console.log("验证结果:", validation);
+    
+    if (!validation.valid) {
+      console.error("模型验证失败:", validation.message);
+      alert(validation.message);
+      return;
+    }
+    
+    console.log("模型验证通过");
+    
+    // 添加原始节点中的数据源节点和特殊节点
+    const dataSourceNodes = elements.filter(node => 
+      node.type === 'mnist' || node.type === 'useData'
+    ).map(node => ({
+      type: node.type,
+      config: node.data || { sequenceId: node.data?.sequenceId || 0 }
+    }));
+    
+    console.log("数据源节点:", dataSourceNodes);
+    
+    // 从图生成有序的模型结构（不包含数据源）
+    const modelStructure = generateModelStructureFromGraph(elements, edges);
+    console.log("生成的模型结构:", modelStructure);
+    
+    if (modelStructure.length === 0) {
+      console.error("无法生成有效的模型结构");
+      alert("无法生成有效的模型结构，请确保您的模型连接正确");
+      return;
+    }
+    
+    // 从配置中填充具体的配置参数
+    const detailedStructure = modelStructure.map(node => {
+      let config = {};
+      
+      if (node.type === 'conv2d') {
+        const index = node.config.index;
+        config = conv2dConfigs[index] || {};
+      } else if (node.type === 'maxPooling2d') {
+        const index = node.config.index;
+        config = maxPooling2dConfigs[index] || {};
+      } else if (node.type === 'dense') {
+        const index = node.config.index;
+        config = denseConfigs[index] || {};
+      } else if (node.type === 'reshape') {
+        const index = node.config.index;
+        config = reshapeConfigs[index] || {};
+      } else if (node.type === 'lstm') {
+        const index = node.config.index;
+        config = lstmConfigs[index] || {};
+      } else if (node.type === 'gru') {
+        const index = node.config.index;
+        config = gruConfigs[index] || {};
+      } else if (node.type === 'activation') {
+        const index = node.config.index;
+        config = activationConfigs[index] || {};
+      } else if (node.type === 'avgPooling2d') {
+        const index = node.config.index;
+        config = avgPooling2dConfigs[index] || {};
+      } else if (node.type === 'dropout') {
+        const index = node.config.index;
+        config = dropoutConfigs[index] || {};
+      } else if (node.type === 'batchNorm') {
+        const index = node.config.index;
+        config = batchNormConfigs[index] || {};
+      } else if (node.type === 'flatten') {
+        const index = node.config.index;
+        config = flattenConfigs[index] || {};
+      }
+      
+      return {
+        type: node.type,
+        config: { ...node.config, ...config }
+      };
+    });
+    
+    // 添加数据源节点
+    const finalStructure = [...dataSourceNodes, ...detailedStructure];
+    console.log("最终结构:", finalStructure);
+    
+    // 生成代码，传入edges参数
+    const code = generateModelCode(finalStructure, edges);
+    setGeneratedCode(code);
+    setIsModalVisible(true);
+  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfigs, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
+
+  // 复制代码到剪贴板
+  const copyCodeToClipboard = () => {
+    navigator.clipboard.writeText(generatedCode).then(() => {
+      alert('Code copied to clipboard');
+    }, () => {
+      alert('Failed to copy, please manually copy the code');
+    });
+  };
+
+  // 初始化节点
+  useEffect(() => {
+    if (nodes.length > 0 && elements.length === 0) {
+      const initialNodes = nodes.map((node) => ({
+        id: node.id,
+        type: node.type,
+        data: { index: node.configIndex },
+        position: node.position || { x: 100, y: 100 },
+      }));
+      setElements(initialNodes);
+    }
+  }, [nodes, elements.length]);
 
   // 添加节点的处理函数
   const handleAddNode = useCallback((type, position) => {
@@ -402,130 +525,8 @@ function FlowComponent() {
     }),
   });
 
-  // 处理节点删除
-  const onNodeDelete = useCallback((nodes) => {
-    nodes.forEach(node => {
-      removeNode(node.id);
-    });
-  }, [removeNode]);
-
-  // 生成TensorFlow.js代码
-  const generateCode = useCallback(() => {
-    // 添加调试信息
-    console.log("生成代码 - 当前节点:", elements);
-    console.log("生成代码 - 当前连接:", edges);
-    
-    // 验证模型结构
-    const validation = validateModelStructure(elements, edges);
-    console.log("验证结果:", validation);
-    
-    if (!validation.valid) {
-      console.error("模型验证失败:", validation.message);
-      message.error(validation.message);
-      return;
-    }
-    
-    console.log("模型验证通过");
-    
-    // 添加原始节点中的数据源节点和特殊节点
-    const dataSourceNodes = elements.filter(node => 
-      node.type === 'mnist' || node.type === 'useData'
-    ).map(node => ({
-      type: node.type,
-      config: node.data || { sequenceId: node.data?.sequenceId || 0 }
-    }));
-    
-    console.log("数据源节点:", dataSourceNodes);
-    
-    // 从图生成有序的模型结构（不包含数据源）
-    const modelStructure = generateModelStructureFromGraph(elements, edges);
-    console.log("生成的模型结构:", modelStructure);
-    
-    if (modelStructure.length === 0) {
-      console.error("无法生成有效的模型结构");
-      message.error("无法生成有效的模型结构，请确保您的模型连接正确");
-      return;
-    }
-    
-    // 从配置中填充具体的配置参数
-    const detailedStructure = modelStructure.map(node => {
-      let config = {};
-      
-      if (node.type === 'conv2d') {
-        const index = node.config.index;
-        config = conv2dConfigs[index] || {};
-      } else if (node.type === 'maxPooling2d') {
-        const index = node.config.index;
-        config = maxPooling2dConfigs[index] || {};
-      } else if (node.type === 'dense') {
-        const index = node.config.index;
-        config = denseConfigs[index] || {};
-      } else if (node.type === 'reshape') {
-        const index = node.config.index;
-        config = reshapeConfigs[index] || {};
-      } else if (node.type === 'lstm') {
-        const index = node.config.index;
-        config = lstmConfigs[index] || {};
-      } else if (node.type === 'gru') {
-        const index = node.config.index;
-        config = gruConfigs[index] || {};
-      } else if (node.type === 'activation') {
-        const index = node.config.index;
-        config = activationConfigs[index] || {};
-      } else if (node.type === 'avgPooling2d') {
-        const index = node.config.index;
-        config = avgPooling2dConfigs[index] || {};
-      } else if (node.type === 'dropout') {
-        const index = node.config.index;
-        config = dropoutConfigs[index] || {};
-      } else if (node.type === 'batchNorm') {
-        const index = node.config.index;
-        config = batchNormConfigs[index] || {};
-      } else if (node.type === 'flatten') {
-        const index = node.config.index;
-        config = flattenConfigs[index] || {};
-      }
-      
-      return {
-        type: node.type,
-        config: { ...node.config, ...config }
-      };
-    });
-    
-    // 添加数据源节点
-    const finalStructure = [...dataSourceNodes, ...detailedStructure];
-    console.log("最终结构:", finalStructure);
-    
-    // 生成代码，传入edges参数
-    const code = generateModelCode(finalStructure, edges);
-    setGeneratedCode(code);
-    setIsModalVisible(true);
-  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfigs, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
-
-  // 复制代码到剪贴板
-  const copyCodeToClipboard = () => {
-    navigator.clipboard.writeText(generatedCode).then(() => {
-      message.success('Code copied to clipboard');
-    }, () => {
-      message.error('Failed to copy, please manually copy the code');
-    });
-  };
-
-  // 初始化节点
-  useEffect(() => {
-    if (nodes.length > 0 && elements.length === 0) {
-      const initialNodes = nodes.map((node) => ({
-        id: node.id,
-        type: node.type,
-        data: { index: node.configIndex },
-        position: node.position || { x: 100, y: 100 },
-      }));
-      setElements(initialNodes);
-    }
-  }, [nodes, elements.length]);
-
   return (
-    <div style={father} ref={reactFlowWrapper}>
+    <div className="relative w-full h-[90vh] min-h-[700px]" ref={reactFlowWrapper}>
       <ReactFlow
         ref={drop}
         nodes={elements}
@@ -547,16 +548,16 @@ function FlowComponent() {
         <Background color="#d1d1d6" gap={16} variant="dots" />
         <MiniMap 
           nodeStrokeColor={(n) => {
-            if (n.type === 'useData' || n.type === 'mnist') return '#32d74b';
-            if (n.type === 'conv2d') return '#007aff';
-            if (n.type === 'maxPooling2d') return '#5856d6';
-            if (n.type === 'dense') return '#ff9f0a';
-            if (n.type === 'trainButton') return '#ff3b30';
-            if (n.type === 'activation') return '#ff2d55';
-            if (n.type === 'avgPooling2d') return '#5e5ce6';
-            if (n.type === 'gru') return '#bf5af2';
-            if (n.type === 'reshape') return '#30b0c7';
-            return '#8e8e93';
+            if (n.type === 'useData' || n.type === 'mnist') return '#10b981';
+            if (n.type === 'conv2d') return '#3b82f6';
+            if (n.type === 'maxPooling2d') return '#6366f1';
+            if (n.type === 'dense') return '#f59e0b';
+            if (n.type === 'trainButton') return '#ef4444';
+            if (n.type === 'activation') return '#ec4899';
+            if (n.type === 'avgPooling2d') return '#6366f1';
+            if (n.type === 'gru') return '#8b5cf6';
+            if (n.type === 'reshape') return '#06b6d4';
+            return '#9ca3af';
           }}
           nodeColor={(n) => {
             if (n.type === 'useData' || n.type === 'mnist') return '#a7f3d0';
@@ -564,8 +565,8 @@ function FlowComponent() {
             if (n.type === 'maxPooling2d') return '#c7d2fe';
             if (n.type === 'dense') return '#fed7aa';
             if (n.type === 'trainButton') return '#fca5a5';
-            if (n.type === 'activation') return '#ffb3c1';
-            if (n.type === 'avgPooling2d') return '#c4c1e0';
+            if (n.type === 'activation') return '#fbcfe8';
+            if (n.type === 'avgPooling2d') return '#c7d2fe';
             if (n.type === 'gru') return '#e9d5ff';
             if (n.type === 'reshape') return '#a5f3fc';
             return '#d1d5db';
@@ -573,60 +574,59 @@ function FlowComponent() {
         />
         <Controls />
         <Panel position="top-right">
-          <div className="bg-white p-3 rounded-xl shadow">
+          <div className="bg-white p-3 rounded-xl shadow-md">
             <h3 className="text-sm font-medium text-gray-800">Drag & Drop Components</h3>
           </div>
         </Panel>
         <Panel position="bottom-center">
-          <Button 
-            type="primary" 
+          <button 
             onClick={generateCode}
-            size="large"
-            style={{
-              background: '#007aff',
-              borderColor: '#007aff',
-              marginBottom: '20px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-              borderRadius: '12px',
-              paddingLeft: '16px',
-              paddingRight: '16px',
-            }}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5"
           >
             Generate TensorFlow.js Code
-          </Button>
+          </button>
         </Panel>
       </ReactFlow>
       
-      <Modal
-        title="Generated TensorFlow.js Model Code"
-        open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        width={800}
-        footer={[
-          <Button key="copy" type="primary" onClick={copyCodeToClipboard}
-            style={{
-              background: '#007aff',
-              borderColor: '#007aff',
-            }}
-          >
-            Copy Code
-          </Button>,
-          <Button key="close" onClick={() => setIsModalVisible(false)}>
-            Close
-          </Button>
-        ]}
-      >
-        <pre style={{ 
-          background: '#f5f5f7', 
-          padding: '15px', 
-          borderRadius: '10px',
-          maxHeight: '500px',
-          overflow: 'auto',
-          fontFamily: 'SF Mono, Menlo, monospace',
-        }}>
-          {generatedCode}
-        </pre>
-      </Modal>
+      {/* 代码生成弹窗 */}
+      {isModalVisible && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center px-6 py-4 border-b">
+              <h3 className="text-lg font-medium text-gray-800">Generated TensorFlow.js Model Code</h3>
+              <button 
+                onClick={() => setIsModalVisible(false)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto p-6">
+              <pre className="bg-gray-50 p-4 rounded-lg overflow-auto font-mono text-sm whitespace-pre-wrap">
+                {generatedCode}
+              </pre>
+            </div>
+            
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button 
+                onClick={copyCodeToClipboard}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out"
+              >
+                Copy Code
+              </button>
+              <button 
+                onClick={() => setIsModalVisible(false)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

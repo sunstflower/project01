@@ -1,184 +1,190 @@
 import React, { useState } from 'react';
-import { Handle } from '@xyflow/react';
-import { Card, InputNumber, Typography, Tooltip, Select, Switch, Divider } from 'antd';
+import { Handle, Position } from '@xyflow/react';
 import useStore from '@/store';
 
-const { Title, Text } = Typography;
-const { Option } = Select;
-
-const LSTMNode = ({ id, data }) => {
+function LSTMNode({ data }) {
   const { lstmConfigs, updateLstmConfig } = useStore();
-  const config = lstmConfigs[data.index] || {
+  const configIndex = data.index || 0;
+  const config = lstmConfigs[configIndex] || {
     units: 128,
     activation: 'tanh',
     recurrentActivation: 'sigmoid',
     returnSequences: false,
-    goBackwards: false,
     dropout: 0.0,
-    recurrentDropout: 0.0,
+    recurrentDropout: 0.0
   };
-
+  
   const [units, setUnits] = useState(config.units);
   const [activation, setActivation] = useState(config.activation);
   const [recurrentActivation, setRecurrentActivation] = useState(config.recurrentActivation);
   const [returnSequences, setReturnSequences] = useState(config.returnSequences);
   const [dropout, setDropout] = useState(config.dropout);
   const [recurrentDropout, setRecurrentDropout] = useState(config.recurrentDropout);
-
-  const handleUnitsChange = (value) => {
-    if (value !== null) {
-      setUnits(value);
-      updateLstmConfig(data.index, { units: value });
-    }
+  
+  const handleUnitsChange = (e) => {
+    const value = parseInt(e.target.value, 10);
+    setUnits(value);
+    updateLstmConfig(configIndex, { ...config, units: value });
   };
-
-  const handleActivationChange = (value) => {
+  
+  const handleActivationChange = (e) => {
+    const value = e.target.value;
     setActivation(value);
-    updateLstmConfig(data.index, { activation: value });
+    updateLstmConfig(configIndex, { ...config, activation: value });
   };
-
-  const handleRecurrentActivationChange = (value) => {
+  
+  const handleRecurrentActivationChange = (e) => {
+    const value = e.target.value;
     setRecurrentActivation(value);
-    updateLstmConfig(data.index, { recurrentActivation: value });
+    updateLstmConfig(configIndex, { ...config, recurrentActivation: value });
   };
-
-  const handleReturnSequencesChange = (checked) => {
-    setReturnSequences(checked);
-    updateLstmConfig(data.index, { returnSequences: checked });
+  
+  const handleReturnSequencesChange = (e) => {
+    const value = e.target.checked;
+    setReturnSequences(value);
+    updateLstmConfig(configIndex, { ...config, returnSequences: value });
   };
-
-  const handleDropoutChange = (value) => {
-    if (value !== null) {
-      setDropout(value);
-      updateLstmConfig(data.index, { dropout: value });
-    }
+  
+  const handleDropoutChange = (e) => {
+    const value = parseFloat(e.target.value);
+    setDropout(value);
+    updateLstmConfig(configIndex, { ...config, dropout: value });
   };
-
-  const handleRecurrentDropoutChange = (value) => {
-    if (value !== null) {
-      setRecurrentDropout(value);
-      updateLstmConfig(data.index, { recurrentDropout: value });
-    }
+  
+  const handleRecurrentDropoutChange = (e) => {
+    const value = parseFloat(e.target.value);
+    setRecurrentDropout(value);
+    updateLstmConfig(configIndex, { ...config, recurrentDropout: value });
   };
 
   return (
-    <Card
-      title={<Title level={5}>LSTM</Title>}
-      size="small"
-      style={{
-        width: 280,
-        borderRadius: '12px',
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-        backgroundColor: '#fdfdfd',
-        borderColor: '#c7d2fe', // Light purple border
-      }}
-      styles={{
-        header: {
-          backgroundColor: '#c7d2fe',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-        },
-      }}
-    >
+    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-blue-200">
+      <div className="text-lg font-medium text-gray-800 mb-4 bg-blue-200 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
+        LSTM 层
+      </div>
+      
       <Handle
         type="target"
-        position="left"
-        style={{ background: '#8b5cf6', width: '10px', height: '10px' }}
+        position={Position.Top}
+        className="w-4 h-4 bg-blue-500 rounded-full"
       />
-
-      <div style={{ padding: '8px 0' }}>
-        <Tooltip title="隐藏层神经元数量">
-          <Text strong>单元数:</Text>
-          <InputNumber
-            min={1}
-            max={1024}
-            step={16}
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">单元数量:</label>
+          <input 
+            type="number" 
             value={units}
             onChange={handleUnitsChange}
-            style={{ width: '100%', marginTop: 8 }}
+            min="1" 
+            max="1024"
+            step="16"
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-        </Tooltip>
-
-        <Divider style={{ margin: '12px 0' }} />
-        
-        <Text strong>激活函数:</Text>
-        <Select
-          value={activation}
-          onChange={handleActivationChange}
-          style={{ width: '100%', marginTop: 8 }}
-        >
-          <Option value="tanh">tanh</Option>
-          <Option value="relu">ReLU</Option>
-          <Option value="sigmoid">Sigmoid</Option>
-          <Option value="softmax">Softmax</Option>
-          <Option value="linear">Linear</Option>
-        </Select>
-
-        <Divider style={{ margin: '12px 0' }} />
-        
-        <Text strong>循环激活函数:</Text>
-        <Select
-          value={recurrentActivation}
-          onChange={handleRecurrentActivationChange}
-          style={{ width: '100%', marginTop: 8 }}
-        >
-          <Option value="sigmoid">Sigmoid</Option>
-          <Option value="tanh">tanh</Option>
-          <Option value="relu">ReLU</Option>
-          <Option value="hard_sigmoid">Hard Sigmoid</Option>
-        </Select>
-
-        <Divider style={{ margin: '12px 0' }} />
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Tooltip title="是否返回完整序列还是仅返回最后一个时间步的输出">
-            <Text strong>返回序列:</Text>
-          </Tooltip>
-          <Switch checked={returnSequences} onChange={handleReturnSequencesChange} />
+          <p className="mt-1 text-xs text-gray-500">
+            LSTM层的隐藏单元数量，建议值：64-512
+          </p>
         </div>
-
-        <Divider style={{ margin: '12px 0' }} />
         
-        <Tooltip title="输入的dropout比率">
-          <Text strong>Dropout:</Text>
-          <InputNumber
-            min={0}
-            max={1}
-            step={0.1}
+        <div className="border-t border-gray-200 pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">激活函数:</label>
+          <select 
+            value={activation}
+            onChange={handleActivationChange}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="tanh">tanh</option>
+            <option value="relu">ReLU</option>
+            <option value="sigmoid">Sigmoid</option>
+            <option value="softmax">Softmax</option>
+            <option value="linear">Linear</option>
+          </select>
+        </div>
+        
+        <div className="border-t border-gray-200 pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">循环激活函数:</label>
+          <select 
+            value={recurrentActivation}
+            onChange={handleRecurrentActivationChange}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="sigmoid">Sigmoid</option>
+            <option value="tanh">Tanh</option>
+            <option value="relu">ReLU</option>
+            <option value="hard_sigmoid">Hard Sigmoid</option>
+          </select>
+        </div>
+        
+        <div className="border-t border-gray-200 pt-4">
+          <div className="flex items-center">
+            <input 
+              type="checkbox" 
+              id="returnSequences"
+              checked={returnSequences}
+              onChange={handleReturnSequencesChange}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="returnSequences" className="ml-2 block text-sm text-gray-700">
+              返回序列
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            如果为true，返回完整的输出序列。直接连接Dense层时请设为false。
+          </p>
+          <div className="mt-2 text-xs text-blue-600">
+            {returnSequences ? 
+              "输出形状将是3D，需要Flatten后再连接Dense层" : 
+              "输出形状将是2D，可以直接连接Dense层"}
+          </div>
+        </div>
+        
+        <div className="border-t border-gray-200 pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Dropout率:</label>
+          <input 
+            type="number" 
             value={dropout}
             onChange={handleDropoutChange}
-            style={{ width: '100%', marginTop: 8 }}
+            min="0" 
+            max="0.9"
+            step="0.1"
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-        </Tooltip>
-
-        <Divider style={{ margin: '12px 0' }} />
+          <p className="mt-1 text-xs text-gray-500">
+            输入的dropout比例 (0-1)
+          </p>
+        </div>
         
-        <Tooltip title="循环状态的dropout比率">
-          <Text strong>循环Dropout:</Text>
-          <InputNumber
-            min={0}
-            max={1}
-            step={0.1}
+        <div className="border-t border-gray-200 pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">循环Dropout率:</label>
+          <input 
+            type="number" 
             value={recurrentDropout}
             onChange={handleRecurrentDropoutChange}
-            style={{ width: '100%', marginTop: 8 }}
+            min="0" 
+            max="0.9"
+            step="0.1"
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-        </Tooltip>
-
-        <div style={{ marginTop: 12 }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
+          <p className="mt-1 text-xs text-gray-500">
+            循环状态的dropout比例 (0-1)
+          </p>
+        </div>
+        
+        <div className="border-t border-gray-200 pt-3">
+          <p className="text-sm text-gray-500">
             长短期记忆网络层，适合处理序列数据和时间序列
-          </Text>
+          </p>
         </div>
       </div>
-
+      
       <Handle
         type="source"
-        position="right"
-        style={{ background: '#8b5cf6', width: '10px', height: '10px' }}
+        position={Position.Bottom}
+        id="a"
+        className="w-4 h-4 bg-blue-500 rounded-full"
       />
-    </Card>
+    </div>
   );
-};
+}
 
 export default LSTMNode; 

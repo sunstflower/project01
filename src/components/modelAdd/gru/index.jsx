@@ -62,13 +62,15 @@ function GRUNode({ data }) {
     };
 
     return (
-        <div className="bg-white shadow-lg rounded-lg p-6 w-80">
-            <div className="text-lg font-medium text-gray-800 mb-4">GRU 层</div>
+        <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-green-100">
+            <div className="text-lg font-medium text-gray-800 mb-4 bg-green-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
+                GRU 层
+            </div>
             
             <Handle
                 type="target"
                 position={Position.Top}
-                className="w-4 h-4 bg-gray-300 rounded-full"
+                className="w-4 h-4 bg-green-400 rounded-full"
             />
             
             <div className="space-y-4">
@@ -81,7 +83,7 @@ function GRUNode({ data }) {
                         min="1" 
                         max="1024"
                         step="16"
-                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                     <p className="mt-1 text-xs text-gray-500">
                         GRU层的隐藏单元数量，建议值：64-512
@@ -93,7 +95,7 @@ function GRUNode({ data }) {
                     <select 
                         value={activation}
                         onChange={handleActivationChange}
-                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     >
                         <option value="tanh">tanh</option>
                         <option value="relu">ReLU</option>
@@ -108,7 +110,7 @@ function GRUNode({ data }) {
                     <select 
                         value={recurrentActivation}
                         onChange={handleRecurrentActivationChange}
-                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     >
                         <option value="sigmoid">Sigmoid</option>
                         <option value="tanh">Tanh</option>
@@ -124,7 +126,7 @@ function GRUNode({ data }) {
                             id="returnSequences"
                             checked={returnSequences}
                             onChange={handleReturnSequencesChange}
-                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            className="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                         />
                         <label htmlFor="returnSequences" className="ml-2 block text-sm text-gray-700">
                             返回序列
@@ -133,7 +135,7 @@ function GRUNode({ data }) {
                     <p className="mt-1 text-xs text-gray-500">
                         如果为true，返回完整的输出序列。直接连接Dense层时请设为false。
                     </p>
-                    <div className="mt-2 text-xs text-blue-600">
+                    <div className="mt-2 text-xs text-green-600">
                         {returnSequences ? 
                             "输出形状将是3D，需要Flatten后再连接Dense层" : 
                             "输出形状将是2D，可以直接连接Dense层"}
@@ -149,7 +151,7 @@ function GRUNode({ data }) {
                         min="0" 
                         max="0.9"
                         step="0.1"
-                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                     <p className="mt-1 text-xs text-gray-500">
                         输入的dropout比例 (0-1)
@@ -165,7 +167,7 @@ function GRUNode({ data }) {
                         min="0" 
                         max="0.9"
                         step="0.1"
-                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                     <p className="mt-1 text-xs text-gray-500">
                         循环状态的dropout比例 (0-1)
@@ -177,7 +179,7 @@ function GRUNode({ data }) {
                 type="source"
                 position={Position.Bottom}
                 id="a"
-                className="w-4 h-4 bg-gray-300 rounded-full"
+                className="w-4 h-4 bg-green-400 rounded-full"
             />
         </div>
     );

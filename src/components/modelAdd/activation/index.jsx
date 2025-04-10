@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import { Handle } from '@xyflow/react';
-import { Card, Typography, Select, Divider, Space } from 'antd';
+import { Handle, Position } from '@xyflow/react';
 import useStore from '@/store';
-
-const { Title, Text } = Typography;
 
 const ACTIVATION_OPTIONS = [
   { value: 'relu', label: 'ReLU' },
@@ -18,72 +15,67 @@ const ACTIVATION_OPTIONS = [
   { value: 'exponential', label: 'Exponential' },
 ];
 
-const ActivationNode = ({ id, data }) => {
+function ActivationNode({ data }) {
   const { activationConfigs, updateActivationConfig } = useStore();
-  const config = activationConfigs[data.index] || {
+  const configIndex = data.index || 0;
+  const config = activationConfigs[configIndex] || {
     activation: 'relu',
   };
 
   const [activation, setActivation] = useState(config.activation);
 
-  const handleActivationChange = (value) => {
+  const handleActivationChange = (e) => {
+    const value = e.target.value;
     setActivation(value);
-    updateActivationConfig(data.index, { ...config, activation: value });
+    updateActivationConfig(configIndex, { activation: value });
   };
 
   return (
-    <Card
-      title={<Title level={5}>Activation</Title>}
-      size="small"
-      style={{
-        width: 280,
-        borderRadius: '12px',
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-        backgroundColor: '#fdfdfd',
-        borderColor: '#c7d2fe',
-      }}
-      styles={{
-        header: {
-          backgroundColor: '#c7d2fe',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-        },
-      }}
-    >
+    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-orange-100">
+      <div className="text-lg font-medium text-gray-800 mb-4 bg-orange-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
+        Activation 层
+      </div>
+      
       <Handle
         type="target"
-        position="left"
-        style={{ background: '#8b5cf6', width: '10px', height: '10px' }}
+        position={Position.Top}
+        className="w-4 h-4 bg-orange-400 rounded-full"
       />
-
-      <div style={{ padding: '8px 0' }}>
-        <Text strong>激活函数:</Text>
-        <Select
-          value={activation}
-          onChange={handleActivationChange}
-          style={{ width: '100%', marginTop: 8 }}
-          options={ACTIVATION_OPTIONS}
-        />
-
-        <Divider style={{ margin: '12px 0' }} />
-
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">激活函数:</label>
+          <select 
+            value={activation}
+            onChange={handleActivationChange}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          >
+            {ACTIVATION_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="border-t border-gray-200 pt-4">
+          <p className="text-sm text-gray-500 mb-1">
             为神经网络层添加非线性变换
-          </Text>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
+          </p>
+          <p className="text-sm text-gray-500">
             常用的激活函数包括 ReLU、Sigmoid、Tanh 等
-          </Text>
-        </Space>
+          </p>
+        </div>
       </div>
-
+      
       <Handle
         type="source"
-        position="right"
-        style={{ background: '#8b5cf6', width: '10px', height: '10px' }}
+        position={Position.Bottom}
+        id="a"
+        className="w-4 h-4 bg-orange-400 rounded-full"
       />
-    </Card>
+    </div>
   );
-};
+}
 
 export default ActivationNode; 

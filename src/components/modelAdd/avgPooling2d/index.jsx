@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import { Handle } from '@xyflow/react';
-import { Card, Typography, InputNumber, Select, Space, Divider } from 'antd';
+import { Handle, Position } from '@xyflow/react';
 import useStore from '@/store';
-
-const { Title, Text } = Typography;
 
 const POOL_SIZE_OPTIONS = [
   { value: '(2, 2)', label: '2x2' },
@@ -16,9 +13,10 @@ const PADDING_OPTIONS = [
   { value: 'same', label: 'Same' },
 ];
 
-const AvgPooling2DNode = ({ id, data }) => {
+function AvgPooling2DNode({ data }) {
   const { avgPooling2dConfigs, updateAvgPooling2dConfig } = useStore();
-  const config = avgPooling2dConfigs[data.index] || {
+  const configIndex = data.index || 0;
+  const config = avgPooling2dConfigs[configIndex] || {
     poolSize: '(2, 2)',
     strides: '(2, 2)',
     padding: 'valid',
@@ -28,98 +26,99 @@ const AvgPooling2DNode = ({ id, data }) => {
   const [strides, setStrides] = useState(config.strides);
   const [padding, setPadding] = useState(config.padding);
 
-  const handlePoolSizeChange = (value) => {
+  const handlePoolSizeChange = (e) => {
+    const value = e.target.value;
     setPoolSize(value);
-    updateAvgPooling2dConfig(data.index, { ...config, poolSize: value });
+    updateAvgPooling2dConfig(configIndex, { ...config, poolSize: value });
   };
 
-  const handleStridesChange = (value) => {
+  const handleStridesChange = (e) => {
+    const value = e.target.value;
     setStrides(value);
-    updateAvgPooling2dConfig(data.index, { ...config, strides: value });
+    updateAvgPooling2dConfig(configIndex, { ...config, strides: value });
   };
 
-  const handlePaddingChange = (value) => {
+  const handlePaddingChange = (e) => {
+    const value = e.target.value;
     setPadding(value);
-    updateAvgPooling2dConfig(data.index, { ...config, padding: value });
+    updateAvgPooling2dConfig(configIndex, { ...config, padding: value });
   };
 
   return (
-    <Card
-      title={<Title level={5}>AvgPooling2D</Title>}
-      size="small"
-      style={{
-        width: 280,
-        borderRadius: '12px',
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-        backgroundColor: '#fdfdfd',
-        borderColor: '#c7d2fe',
-      }}
-      styles={{
-        header: {
-          backgroundColor: '#c7d2fe',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-        },
-      }}
-    >
+    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-purple-100">
+      <div className="text-lg font-medium text-gray-800 mb-4 bg-purple-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
+        Average Pooling 2D 层
+      </div>
+      
       <Handle
         type="target"
-        position="left"
-        style={{ background: '#8b5cf6', width: '10px', height: '10px' }}
+        position={Position.Top}
+        className="w-4 h-4 bg-purple-400 rounded-full"
       />
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            池化大小:
+          </label>
+          <select 
+            value={poolSize}
+            onChange={handlePoolSizeChange}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          >
+            {POOL_SIZE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div style={{ padding: '8px 0' }}>
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <div>
-            <Text strong>池化大小:</Text>
-            <Select
-              value={poolSize}
-              onChange={handlePoolSizeChange}
-              options={POOL_SIZE_OPTIONS}
-              style={{ width: '100%', marginTop: 8 }}
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            步长:
+          </label>
+          <input 
+            type="text" 
+            value={strides}
+            onChange={handleStridesChange}
+            placeholder="例如: (2, 2)"
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
 
-          <div>
-            <Text strong>步长:</Text>
-            <Select
-              value={strides}
-              onChange={handleStridesChange}
-              options={POOL_SIZE_OPTIONS}
-              style={{ width: '100%', marginTop: 8 }}
-            />
-          </div>
-
-          <div>
-            <Text strong>填充:</Text>
-            <Select
-              value={padding}
-              onChange={handlePaddingChange}
-              options={PADDING_OPTIONS}
-              style={{ width: '100%', marginTop: 8 }}
-            />
-          </div>
-        </Space>
-
-        <Divider style={{ margin: '12px 0' }} />
-
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            对输入特征图进行平均池化操作
-          </Text>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            通过计算池化窗口内所有值的平均值来降维
-          </Text>
-        </Space>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            填充方式:
+          </label>
+          <select 
+            value={padding}
+            onChange={handlePaddingChange}
+            className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          >
+            {PADDING_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="border-t border-gray-200 pt-3">
+          <p className="text-sm text-gray-500">
+            计算输入的平均值，减少空间维度并提取特征
+          </p>
+        </div>
       </div>
-
+      
       <Handle
         type="source"
-        position="right"
-        style={{ background: '#8b5cf6', width: '10px', height: '10px' }}
+        position={Position.Bottom}
+        id="a"
+        className="w-4 h-4 bg-purple-400 rounded-full"
       />
-    </Card>
+    </div>
   );
-};
+}
 
 export default AvgPooling2DNode; 

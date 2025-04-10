@@ -1,54 +1,37 @@
 import React from 'react';
-import { Handle } from '@xyflow/react';
-import { Card, Typography } from 'antd';
+import { Handle, Position } from '@xyflow/react';
 
-const { Title, Text } = Typography;
-
-const FlattenNode = ({ id }) => {
+function FlattenNode() {
   return (
-    <Card
-      title={<Title level={5}>Flatten</Title>}
-      size="small"
-      style={{
-        width: 280,
-        borderRadius: '12px',
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-        backgroundColor: '#fdfdfd',
-        borderColor: '#fde68a', // Light yellow border
-      }}
-      styles={{
-        header: {
-          backgroundColor: '#fde68a',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-        },
-      }}
-    >
+    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-amber-200">
+      <div className="text-lg font-medium text-gray-800 mb-4 bg-amber-200 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
+        Flatten 层
+      </div>
+      
       <Handle
         type="target"
-        position="left"
-        style={{ background: '#fbbf24', width: '10px', height: '10px' }}
+        position={Position.Top}
+        className="w-4 h-4 bg-amber-400 rounded-full"
       />
-
-      <div style={{ padding: '8px 0' }}>
-        <Text>
+      
+      <div className="space-y-4">
+        <p className="text-sm text-gray-700">
           将多维输入展平为一维向量，通常用于连接卷积/池化层与全连接层
-        </Text>
+        </p>
         
-        <div style={{ marginTop: 12 }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            该层没有可配置的参数
-          </Text>
+        <div className="text-xs text-gray-500 mt-2">
+          该层没有可配置的参数
         </div>
       </div>
-
+      
       <Handle
         type="source"
-        position="right"
-        style={{ background: '#fbbf24', width: '10px', height: '10px' }}
+        position={Position.Bottom}
+        id="a"
+        className="w-4 h-4 bg-amber-400 rounded-full"
       />
-    </Card>
+    </div>
   );
-};
+}
 
 export default FlattenNode; 

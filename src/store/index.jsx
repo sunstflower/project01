@@ -220,8 +220,8 @@ const useStore = create((set) => ({
   avgPooling2dConfigs: [],
   addAvgPooling2dConfig: () => set((state) => ({
     avgPooling2dConfigs: [...state.avgPooling2dConfigs, {
-      poolSize: [2, 2],
-      strides: [2, 2],
+      poolSize: '(2, 2)',
+      strides: '(2, 2)',
       padding: 'valid',
     }]
   })),
