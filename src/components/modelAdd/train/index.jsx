@@ -125,13 +125,25 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
           layerCount++;
           break;
         case 'dense':
-          // 在添加Dense层之前，确保添加了Flatten层
-          if (!hasAddedFlatten) {
+          // 在添加Dense层之前，检查上一层的类型
+          // 如果前一层是GRU或LSTM，它们已经输出2D张量，不需要添加Flatten
+          const prevLayerType = model.layers.length > 0 ? model.layers[model.layers.length - 1].constructor.name.toLowerCase() : '';
+          const needFlatten = !hasAddedFlatten && 
+                              !prevLayerType.includes('gru') && 
+                              !prevLayerType.includes('lstm') &&
+                              !prevLayerType.includes('dense') && 
+                              !prevLayerType.includes('dropout') &&
+                              !prevLayerType.includes('activation');
+          
+          if (needFlatten) {
             console.log('Adding Flatten layer before Dense layer');
             model.add(tf.layers.flatten());
             hasAddedFlatten = true;
             layerCount++;
+          } else if (prevLayerType) {
+            console.log(`Connecting Dense directly to ${prevLayerType} (Flatten not needed)`);
           }
+          
           console.log('Adding Dense layer');
           model.add(tf.layers.dense(denseConfigs[node.configIndex] || denseConfigs[0]));
           layerCount++;
@@ -168,10 +180,35 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
           break;
         case 'gru':
           if (layerCount === 0) {
-            // 第一个GRU层需要指定inputShape
+            // 第一个GRU层需要指定inputShape，根据数据源动态调整
             console.log('Adding first GRU layer with inputShape');
+            
+            // 获取CSV数据信息，如果有的话
+            const csvData = useStore.getState().csvData;
+            let featuresDim = 28; // 默认值，适用于MNIST数据
+            
+            // 如果CSV数据存在，尝试自动检测特征维度
+            if (csvData && csvData.length > 0) {
+              const numericColumns = [];
+              // 识别所有数值列
+              if (csvData[0]) {
+                Object.keys(csvData[0]).forEach(key => {
+                  if (key !== 'label' && key !== 'date' && 
+                      (typeof csvData[0][key] === 'number' || !isNaN(parseFloat(csvData[0][key])))) {
+                    numericColumns.push(key);
+                  }
+                });
+              }
+              
+              if (numericColumns.length > 0) {
+                featuresDim = numericColumns.length;
+              }
+            }
+            
+            console.log(`Detected features dimension for GRU: ${featuresDim}`);
+            
             model.add(tf.layers.gru({
-              inputShape: [null, 28], // 假设输入是序列数据，需要根据实际情况调整
+              inputShape: [null, featuresDim], // 动态设置特征维度
               ...useStore.getState().gruConfigs[node.configIndex]
             }));
           } else {
@@ -234,18 +271,107 @@ async function train(model, data, isCsv) {
   let trainXs, trainYs, testXs, testYs;
 
   if (isCsv) {
-    // Assuming CSV has columns: pixel1, pixel2, ..., pixel784, label
-    const pixels = data.map(row => Object.values(row).slice(0, -1).map(Number));
-    const labels = data.map(row => Number(row.label));
-
-    const xs = tf.tensor(pixels, [pixels.length, 28, 28, 1]);
-    const ys = tf.oneHot(labels, 10);
-
-    // Split into training and testing sets
+    // 处理CSV数据，检测数值列
+    console.log('Processing CSV data for training');
+    const numericColumns = [];
+    
+    // 识别所有数值列
+    if (data.length > 0 && data[0]) {
+      Object.keys(data[0]).forEach(key => {
+        if (key !== 'label' && key !== 'date' && 
+            (typeof data[0][key] === 'number' || !isNaN(parseFloat(data[0][key])))) {
+          numericColumns.push(key);
+        }
+      });
+    }
+    
+    console.log('Detected numeric columns:', numericColumns);
+    
+    if (numericColumns.length === 0) {
+      console.error('No numeric columns found in CSV data');
+      return;
+    }
+    
+    // 提取特征和标签
+    const features = data.map(row => {
+      return numericColumns.map(col => {
+        const value = typeof row[col] === 'number' ? row[col] : parseFloat(row[col]);
+        return isNaN(value) ? 0 : value;
+      });
+    });
+    
+    console.log(`Extracted ${features.length} samples, each with ${features[0].length} features`);
+    
+    // 检查数据是否足够进行训练
+    if (features.length < 10) {
+      console.error('Not enough data samples for training (minimum 10 required)');
+      return;
+    }
+    
+    const labelField = 'label';
+    const labels = data.map(row => Number(row[labelField] || 0));
+    const uniqueLabels = [...new Set(labels)];
+    const numClasses = Math.max(uniqueLabels.length, 3); // 至少有3个类别
+    
+    // 数据标准化 - 对每个特征进行归一化处理
+    const featureMeans = [];
+    const featureStds = [];
+    
+    // 计算每个特征的均值
+    for (let i = 0; i < features[0].length; i++) {
+      let sum = 0;
+      for (let j = 0; j < features.length; j++) {
+        sum += features[j][i];
+      }
+      featureMeans.push(sum / features.length);
+    }
+    
+    // 计算每个特征的标准差
+    for (let i = 0; i < features[0].length; i++) {
+      let sumSquaredDiff = 0;
+      for (let j = 0; j < features.length; j++) {
+        sumSquaredDiff += Math.pow(features[j][i] - featureMeans[i], 2);
+      }
+      featureStds.push(Math.sqrt(sumSquaredDiff / features.length) || 1);
+    }
+    
+    // 标准化特征
+    const normalizedFeatures = features.map(sample => {
+      return sample.map((value, index) => {
+        return (value - featureMeans[index]) / featureStds[index];
+      });
+    });
+    
+    console.log('Feature statistics:');
+    console.log('- Means:', featureMeans);
+    console.log('- Standard deviations:', featureStds);
+    
+    console.log(`Found ${numClasses} unique classes in label column`);
+    
+    // 创建正确的3D数组结构 [samples, timesteps, features]
+    const reshapedFeatures = [];
+    for (let i = 0; i < normalizedFeatures.length; i++) {
+      const sample = [];
+      sample.push(normalizedFeatures[i]); // 一个样本只有一个时间步
+      reshapedFeatures.push(sample);
+    }
+    
+    console.log('Final tensor shape:', 
+      `[${reshapedFeatures.length}, ${reshapedFeatures[0].length}, ${reshapedFeatures[0][0].length}]`);
+    
+    // 创建张量
+    const xs = tf.tensor3d(reshapedFeatures);
+    const ys = tf.oneHot(labels, numClasses);
+    
+    console.log('Created tensors -', 
+      'Features:', xs.shape, 
+      'Labels:', ys.shape);
+    
+    // 分割训练集和测试集
     const splitIndex = Math.floor(xs.shape[0] * 0.8);
     [trainXs, testXs] = tf.split(xs, [splitIndex, xs.shape[0] - splitIndex]);
     [trainYs, testYs] = tf.split(ys, [splitIndex, ys.shape[0] - splitIndex]);
-
+    
     xs.dispose();
     ys.dispose();
   } else {
@@ -270,18 +396,48 @@ async function train(model, data, isCsv) {
     });
   }
 
-  return model.fit(trainXs, trainYs, {
-    batchSize: 512,
-    validationData: [testXs, testYs],
-    epochs: 10,
-    shuffle: true,
-    callbacks: fitCallbacks
-  }).finally(() => {
+  // 训练模型
+  try {
+    console.log(`Starting training with:
+      - Training data shape: ${trainXs.shape} 
+      - Training labels shape: ${trainYs.shape}
+      - Testing data shape: ${testXs.shape}
+      - Testing labels shape: ${testYs.shape}
+    `);
+    
+    // 调试: 检查模型的预期输入形状
+    if (model.inputs.length > 0) {
+      console.log('Model expected input shape:', model.inputs[0].shape);
+    }
+    
+    return await model.fit(trainXs, trainYs, {
+      batchSize: 512,
+      validationData: [testXs, testYs],
+      epochs: 10,
+      shuffle: true,
+      callbacks: fitCallbacks
+    });
+  } catch (error) {
+    console.error('Error during model training:', error);
+    console.error('Error details:', error.message);
+    
+    // 详细打印张量信息以便于调试
+    console.error('Feature tensor info:', {
+      shape: trainXs.shape,
+      dataType: trainXs.dtype,
+      size: trainXs.size
+    });
+    
+    tfvis.show.text({ name: 'Training Error', tab: 'Model' }, 
+      `训练错误: ${error.message}\n请检查console获取更多详情。`);
+      
+    throw error;
+  } finally {
     trainXs.dispose();
     trainYs.dispose();
     testXs.dispose();
     testYs.dispose();
-  });
+  }
 }
 
 function TrainButton() {

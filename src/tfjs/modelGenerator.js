@@ -287,63 +287,122 @@ export const generateModelCode = (modelStructure, edges) => {
       
       // 将CSV数据转换为张量
       const createTensorsFromCsvData = (data, timeSteps = 7, predictSteps = 1) => {
-        // 假设data是一个已经加载并解析好的CSV数据数组
-        // 数据结构: [{date: '2012/1/1', precipitation: 0, temp_max: 12.8, temp_min: 5, wind: 4.7, weather: 'drizzle'}, ...]
+        // 数据已经在UseData组件中预处理过，是一个数组，每行包含所有数值列的值
         
         console.log('Processing CSV data with length:', data.length);
         
+        if (!data || data.length === 0) {
+          console.error('Empty CSV data');
+          return { xs: null, labels: null };
+        }
+        
+        // 获取数据中的所有数值列
+        const numericColumns = Object.keys(data[0]).filter(key => 
+          typeof data[0][key] === 'number' || !isNaN(parseFloat(data[0][key]))
+        );
+        
+        console.log('Detected numeric columns:', numericColumns);
+        
+        if (numericColumns.length === 0) {
+          console.error('No numeric columns found in CSV data');
+          return { xs: null, labels: null };
+        }
+        
         // 提取数值特征
-        const features = data.map(row => [
-          parseFloat(row.precipitation),
-          parseFloat(row.temp_max),
-          parseFloat(row.temp_min),
-          parseFloat(row.wind)
-        ]);
+        const features = data.map(row => {
+          return numericColumns.map(col => {
+            const value = typeof row[col] === 'number' ? row[col] : parseFloat(row[col]);
+            return isNaN(value) ? 0 : value;
+          });
+        });
+        
+        console.log('Extracted features with shape:', features.length, 'x', features[0]?.length || 0);
         
         // 数据归一化
         const { normalizedFeatures, mins, maxs } = normalizeData(features);
         
-        // 创建序列数据
-        const sequences = [];
-        const targets = [];
+        // 确定要预测的列（默认使用第一个数值列）
+        const targetColumnIndex = 0;
         
-        // 对于每个可能的序列
-        for (let i = 0; i <= normalizedFeatures.length - timeSteps - predictSteps; i++) {
-          // 提取输入序列
-          const sequence = normalizedFeatures.slice(i, i + timeSteps);
-          sequences.push(sequence);
+        // 创建3D张量数据 (必须至少是3维才能与Flatten层兼容)
+        // 形状: [样本数, 1或timeSteps, 特征数]
+        let xs, ys;
+        
+        if (timeSteps > 1 && normalizedFeatures.length > timeSteps) {
+          // 时间序列方法 - 使用滑动窗口
+          const sequences = [];
+          const targets = [];
           
-          // 提取目标值 (例如，预测下一个时间步的最高温度)
-          const target = normalizedFeatures[i + timeSteps + predictSteps - 1][1]; // 索引1是temp_max
-          targets.push(target);
+          for (let i = 0; i <= normalizedFeatures.length - timeSteps - predictSteps; i++) {
+            const sequence = normalizedFeatures.slice(i, i + timeSteps);
+            sequences.push(sequence);
+            
+            // 默认预测下一个时间步的第一个特征
+            const target = normalizedFeatures[i + timeSteps + predictSteps - 1][targetColumnIndex];
+            targets.push([target]);
+          }
+          
+          xs = tf.tensor3d(sequences);
+          ys = tf.tensor2d(targets);
+          
+          console.log('Created time series data with shape:', 
+            'xs:', xs.shape, 'ys:', ys.shape);
+        } else {
+          // 非时间序列方法 - 每个样本独立处理，但仍创建3D张量
+          // 第二维设为1，保证与Flatten层兼容
+          
+          // 创建标签 (可以使用任何数值列作为标签，这里使用第一列)
+          // 对于分类问题，通常需要将标签转为one-hot编码
+          const featureCount = normalizedFeatures[0].length;
+          
+          // 使用所有特征作为输入
+          const reshapedFeatures = normalizedFeatures.map(row => [row]); // 添加时间步维度 [batch, timesteps=1, features]
+          
+          xs = tf.tensor3d(reshapedFeatures);
+          
+          // 根据是分类还是回归问题，创建不同的标签
+          // 这里假设是回归问题，直接使用第一个特征作为目标
+          const targetValues = normalizedFeatures.map(row => [row[targetColumnIndex]]);
+          ys = tf.tensor2d(targetValues);
+          
+          console.log('Created standard data with shape:', 
+            'xs:', xs.shape, 'ys:', ys.shape);
         }
-        
-        console.log('Created sequences:', sequences.length);
-        
-        // 创建张量
-        const xs = tf.tensor3d(sequences);
-        const ys = tf.tensor2d(targets.map(t => [t]));
         
         return {
           xs,
           labels: ys,
           mins,
-          maxs
+          maxs,
+          numericColumns
         };
       };
       
       // 数据归一化函数
       const normalizeData = (data) => {
-        // 找到每个特征的最小值和最大值
-        const mins = Array(data[0].length).fill(Number.MAX_SAFE_INTEGER);
-        const maxs = Array(data[0].length).fill(Number.MIN_SAFE_INTEGER);
+        if (!data || !data[0]) {
+          return { normalizedFeatures: [], mins: [], maxs: [] };
+        }
         
-        data.forEach(row => {
-          row.forEach((val, i) => {
-            if (val < mins[i]) mins[i] = val;
-            if (val > maxs[i]) maxs[i] = val;
-          });
-        });
+        // 找到每个特征的最小值和最大值
+        const featureCount = data[0].length;
+        const mins = Array(featureCount).fill(Number.MAX_SAFE_INTEGER);
+        const maxs = Array(featureCount).fill(Number.MIN_SAFE_INTEGER);
+        
+        // 首先找最大最小值
+        for (const row of data) {
+          for (let i = 0; i < featureCount; i++) {
+            if (row[i] < mins[i]) mins[i] = row[i];
+            if (row[i] > maxs[i]) maxs[i] = row[i];
+          }
+        }
+        
+        // 防止除以零
+        for (let i = 0; i < featureCount; i++) {
+          if (mins[i] === maxs[i]) {
+            maxs[i] = mins[i] + 1;
+          }
+        }
         
         // 归一化数据
         const normalizedFeatures = data.map(row => {
@@ -356,29 +415,18 @@ export const generateModelCode = (modelStructure, edges) => {
       };
       
       // 加载CSV数据
-      // 注意: 实际使用时，你需要替换为你的CSV数据加载逻辑
+      // 使用 store 中的实际数据而不是示例数据
       const loadCsvData = async () => {
-        // 这里应该包含实际加载CSV数据的代码
-        // 例如使用 fetch 加载文件，或者从输入字段获取
+        // 从 store 获取数据
+        const csvData = useStore.getState().csvData;
         
-        // 示例假数据
-        const sampleData = [];
-        for (let i = 0; i < 1462; i++) {
-          const date = new Date(2012, 0, 1);
-          date.setDate(date.getDate() + i);
-          
-          sampleData.push({
-            date: \`\${date.getFullYear()}/\${date.getMonth()+1}/\${date.getDate()}\`,
-            precipitation: Math.random() * 20,
-            temp_max: 10 + Math.random() * 10,
-            temp_min: Math.random() * 8,
-            wind: Math.random() * 10,
-            weather: ['rain', 'sun', 'drizzle', 'cloudy'][Math.floor(Math.random() * 4)]
-          });
+        if (!csvData || csvData.length === 0) {
+          console.error('No CSV data found in store. Make sure to upload and process data first.');
+          throw new Error('No CSV data available');
         }
         
-        console.log('Loaded sample CSV data with length:', sampleData.length);
-        return sampleData;
+        console.log('Loaded CSV data from store with length:', csvData.length);
+        return csvData;
       };
       
       // 执行数据加载和训练
@@ -387,8 +435,15 @@ export const generateModelCode = (modelStructure, edges) => {
         const csvData = await loadCsvData();
         
         // 创建张量数据
-        const timeSteps = 7; // 使用前7天数据预测
-        const trainData = createTensorsFromCsvData(csvData, timeSteps);
+        // 对于非时间序列数据，使用 timeSteps=1 确保形状正确
+        const trainData = createTensorsFromCsvData(csvData, 1);
+        
+        if (!trainData.xs) {
+          throw new Error('Failed to create tensor data from CSV');
+        }
+        
+        console.log('Input tensor shape:', trainData.xs.shape);
+        console.log('Target tensor shape:', trainData.labels.shape);
         
         // 训练模型
         const history = await trainModel(model, trainData);
@@ -609,7 +664,7 @@ export const generateModelCode = (modelStructure, edges) => {
   
   // 生成Reshape层代码
   const generateReshapeCode = (config, isFirstLayer) => {
-    const { targetShape = '(None, 7, 4)' } = config || {};
+    const { targetShape = '(None, 7, 4)', inputFeatures = 4 } = config || {};
     
     console.log('Reshape config:', config);
     console.log('Target shape (original):', targetShape, typeof targetShape);
@@ -621,7 +676,7 @@ export const generateModelCode = (modelStructure, edges) => {
       parsedShape = targetShape.replace(/[()]/g, '').split(',').map(item => {
         item = item.trim();
         // 处理 "None" 值，在 TensorFlow.js 中使用 null 表示
-        return item === 'None' ? 'null' : parseInt(item, 10);
+        return item === 'None' || item === 'null' ? 'null' : parseInt(item, 10);
       });
       
       console.log('Parsed shape after string processing:', parsedShape);
@@ -638,26 +693,41 @@ export const generateModelCode = (modelStructure, edges) => {
     
     // 如果是第一层，需要添加 inputShape
     if (isFirstLayer) {
-      code += `  console.log('Adding Reshape as first layer with inputShape=[inputFeatures]');\n`;
-      code += `  // Reshape as first layer requires inputShape\n`;
+      code += `  console.log('Adding Reshape as first layer');\n`;
+      code += `  // Reshape as first layer - ensure inputShape is at least 2D for Flatten compatibility\n`;
       code += `  model.add(tf.layers.reshape({\n`;
       
-      // 确保设置正确的 inputShape
-      // 对于 CSV 数据，输入应该是一维数组，长度为特征数量
-      code += `    inputShape: [inputFeatures],\n`;
+      // 确保输入形状正确
+      // 对于CSV数据，我们确保输入是二维的，至少包含一个时间步维度
+      code += `    // 为避免维度错误, 确保输入形状是合适的\n`;
+      
+      // 根据不同情况设置不同的输入形状
+      code += `    // 检查数据源是CSV还是图像数据\n`;
+      code += `    inputShape: Array.isArray(inputFeatures) ? inputFeatures : [inputFeatures],\n`;
       
       // 确保 targetShape 是适当的格式
-      code += `    targetShape: [${parsedShape.join(', ')}]\n`;
+      code += `    targetShape: [${parsedShape.join(', ')}],\n`;
+      code += `    // 添加错误处理以防止维度不兼容\n`;
+      code += `    // 如果需要从1D到更高维度，请确保原始数据大小兼容\n`;
     } else {
       // 不是第一层
       code += `  console.log('Adding Reshape layer (not first)');\n`;
       code += `  model.add(tf.layers.reshape({\n`;
       
       // 目标形状
-      code += `    targetShape: [${parsedShape.join(', ')}]\n`;
+      code += `    targetShape: [${parsedShape.join(', ')}],\n`;
     }
     
     code += `  }));\n\n`;
+    
+    // 添加调试代码来帮助解决维度问题
+    code += `  // 打印 Reshape 后的输出形状以帮助调试\n`;
+    code += `  try {\n`;
+    code += `    const lastLayerOutput = model.layers[model.layers.length - 1].outputShape;\n`;
+    code += `    console.log('Reshape output shape:', lastLayerOutput);\n`;
+    code += `  } catch (e) {\n`;
+    code += `    console.warn('Could not determine Reshape output shape:', e.message);\n`;
+    code += `  }\n\n`;
     
     return code;
   };

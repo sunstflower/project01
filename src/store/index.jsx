@@ -206,6 +206,7 @@ const useStore = create((set) => ({
   addReshapeConfig: () => set((state) => ({
     reshapeConfigs: [...state.reshapeConfigs, {
       targetShape: '(None, 7, 4)',
+      inputFeatures: 4
     }]
   })),
   updateReshapeConfig: (index, config) => set((state) => ({
