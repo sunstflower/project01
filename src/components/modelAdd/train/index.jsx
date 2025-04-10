@@ -25,7 +25,7 @@ async function showExamples(data) {
   }
 }
 
-function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig, nodes, edges) {
+function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges) {
   const model = tf.sequential();
   const IMAGE_WIDTH = 28;
   const IMAGE_HEIGHT = 28;
@@ -133,7 +133,7 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig, nodes, edges)
             layerCount++;
           }
           console.log('Adding Dense layer');
-          model.add(tf.layers.dense(denseConfig));
+          model.add(tf.layers.dense(denseConfigs[node.configIndex] || denseConfigs[0]));
           layerCount++;
           break;
         case 'dropout':
@@ -288,7 +288,7 @@ function TrainButton() {
   const { 
     conv2dConfigs, 
     maxPooling2dConfigs, 
-    denseConfig, 
+    denseConfigs, 
     csvData, 
     isData, 
     nodes, 
@@ -308,11 +308,11 @@ function TrainButton() {
       await showExamples(data);
     }
 
-    const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfig, nodes, edges);
+    const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges);
     tfvis.show.modelSummary({ name: 'Model Architecture', tab: 'Model' }, model);
 
     await train(model, data, isCsv);
-  }, [conv2dConfigs, maxPooling2dConfigs, denseConfig, csvData, isData, nodes, edges]);
+  }, [conv2dConfigs, maxPooling2dConfigs, denseConfigs, csvData, isData, nodes, edges]);
 
   return (
     <button 

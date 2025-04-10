@@ -66,14 +66,24 @@ const useStore = create((set) => ({
     maxPooling2dConfigs: state.maxPooling2dConfigs.filter((_, i) => i !== index)
   })),
 
-  // 全连接层配置
-  denseConfig: {
+  // 全连接层配置 - 改为数组形式
+  denseConfigs: [{
     units: 10,
     kernelInitializer: 'varianceScaling',
     activation: 'softmax'
-  },
-  updateDenseConfig: (config) => set((state) => ({
-    denseConfig: {...state.denseConfig, ...config}
+  }],
+  addDenseConfig: () => set((state) => ({
+    denseConfigs: [...state.denseConfigs, {
+      units: 128,
+      kernelInitializer: 'varianceScaling',
+      activation: 'relu'
+    }]
+  })),
+  updateDenseConfig: (index, config) => set((state) => ({
+    denseConfigs: state.denseConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  })),
+  removeDenseConfig: (index) => set((state) => ({
+    denseConfigs: state.denseConfigs.filter((_, i) => i !== index)
   })),
 
   // 新增: Dropout层配置
@@ -261,6 +271,8 @@ const useStore = create((set) => ({
       state.addConv2dConfig();
     } else if (type === 'maxPooling2d' && configIndex !== undefined) {
       state.addMaxPooling2dConfig();
+    } else if (type === 'dense' && configIndex !== undefined) {
+      state.addDenseConfig();
     } else if (type === 'dropout' && configIndex !== undefined) {
       state.addDropoutConfig();
     } else if (type === 'batchNorm' && configIndex !== undefined) {
@@ -322,6 +334,8 @@ const useStore = create((set) => ({
       state.removeConv2dConfig(nodeToRemove.configIndex);
     } else if (nodeToRemove.type === 'maxPooling2d' && nodeToRemove.configIndex !== undefined) {
       state.removeMaxPooling2dConfig(nodeToRemove.configIndex);
+    } else if (nodeToRemove.type === 'dense' && nodeToRemove.configIndex !== undefined) {
+      state.removeDenseConfig(nodeToRemove.configIndex);
     } else if (nodeToRemove.type === 'dropout' && nodeToRemove.configIndex !== undefined) {
       state.removeDropoutConfig(nodeToRemove.configIndex);
     } else if (nodeToRemove.type === 'batchNorm' && nodeToRemove.configIndex !== undefined) {
@@ -370,7 +384,7 @@ const useStore = create((set) => ({
       } else if (node.type === 'dense') {
         return {
           type: 'dense',
-          config: state.denseConfig
+          config: state.denseConfigs[node.configIndex]
         };
       } else if (node.type === 'dropout') {
         return {

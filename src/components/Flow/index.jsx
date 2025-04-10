@@ -115,7 +115,7 @@ function FlowComponent() {
     updateNodePosition,
     conv2dConfigs,
     maxPooling2dConfigs,
-    denseConfig,
+    denseConfigs,
     reshapeConfigs,
     lstmConfigs,
     gruConfigs,
@@ -242,12 +242,13 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'dense') {
+      configIndex = denseConfigs.length;
       nodeId = `dense-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'dense',
         data: { 
-          index: 0,
+          index: configIndex,
           sequenceId: sequenceId 
         },
         position,
@@ -377,7 +378,7 @@ function FlowComponent() {
     if (newEdges.length > 0) {
       setEdges(edges => [...edges, ...newEdges]);
     }
-  }, [addNode, conv2dConfigs.length, maxPooling2dConfigs.length, elements, edges]);
+  }, [addNode, conv2dConfigs.length, maxPooling2dConfigs.length, denseConfigs.length, elements, edges]);
 
   // 使用ReactDnD处理拖拽
   const [{ isOver }, drop] = useDrop({
@@ -457,7 +458,8 @@ function FlowComponent() {
         const index = node.config.index;
         config = maxPooling2dConfigs[index] || {};
       } else if (node.type === 'dense') {
-        config = denseConfig;
+        const index = node.config.index;
+        config = denseConfigs[index] || {};
       } else if (node.type === 'reshape') {
         const index = node.config.index;
         config = reshapeConfigs[index] || {};
@@ -498,7 +500,7 @@ function FlowComponent() {
     const code = generateModelCode(finalStructure, edges);
     setGeneratedCode(code);
     setIsModalVisible(true);
-  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfig, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
+  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfigs, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
 
   // 复制代码到剪贴板
   const copyCodeToClipboard = () => {

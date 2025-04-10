@@ -4,9 +4,13 @@ import useStore from '@/store';
 
 function DenseNode({ data }) {
     const { 
-        denseConfig, 
+        denseConfigs, 
         updateDenseConfig 
     } = useStore();
+    
+    // 使用传入的index获取对应的配置
+    const configIndex = data.index || 0;
+    const config = denseConfigs[configIndex] || denseConfigs[0];
 
     return (
         <div className="text-updater-node bg-white shadow-lg rounded-lg p-6 w-80">
@@ -21,8 +25,8 @@ function DenseNode({ data }) {
                     id="unitsInput" 
                     name="units" 
                     type="number" 
-                    value={denseConfig.units || 10} 
-                    onChange={(e) => updateDenseConfig({ units: parseInt(e.target.value, 10) })} 
+                    value={config.units || 10} 
+                    onChange={(e) => updateDenseConfig(configIndex, { units: parseInt(e.target.value, 10) })} 
                     className="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;"
                 />
                 
@@ -30,8 +34,8 @@ function DenseNode({ data }) {
                 <select 
                     id="kernelInitializerSelect" 
                     name="kernelInitializer" 
-                    value={denseConfig.kernelInitializer || 'varianceScaling'} 
-                    onChange={(e) => updateDenseConfig({ kernelInitializer: e.target.value })} 
+                    value={config.kernelInitializer || 'varianceScaling'} 
+                    onChange={(e) => updateDenseConfig(configIndex, { kernelInitializer: e.target.value })} 
                     className="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;"
                 >
                     <option value="varianceScaling">Variance Scaling</option>
@@ -41,8 +45,8 @@ function DenseNode({ data }) {
                 <select 
                     id="activationSelect" 
                     name="activation" 
-                    value={denseConfig.activation || 'softmax'} 
-                    onChange={(e) => updateDenseConfig({ activation: e.target.value })} 
+                    value={config.activation || 'softmax'} 
+                    onChange={(e) => updateDenseConfig(configIndex, { activation: e.target.value })} 
                     className="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;"
                 >
                     <option value="relu">ReLU</option>
