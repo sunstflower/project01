@@ -462,6 +462,11 @@ const useStore = create((set) => ({
   setUseMnist: (value) => set(() => ({ useMnist: value })),
 }));
 
+// 将store实例放到window对象上以便全局访问
+if (typeof window !== 'undefined') {
+  window.useStore = useStore;
+}
+
 export default useStore;
 
 

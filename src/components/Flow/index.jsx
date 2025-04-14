@@ -13,7 +13,9 @@ import {
 } from '@xyflow/react';
 import './dist.css';
 import { useDrop } from 'react-dnd';
-import { generateModelCode, validateModelStructure, generateModelStructureFromGraph } from '@/tfjs/modelGenerator';
+import { generateModelCode, validateModelStructure, generateModelStructureFromGraph, generateLayerTooltip } from '@/tfjs/modelGenerator';
+import { validateConnection } from '@/utils/layerValidation';
+import LayerTooltip from '../Tooltip/LayerTooltip';
 
 import UseData from '../UseData';
 import MnistData from '../modelAdd/mnist';
@@ -124,6 +126,7 @@ function FlowComponent() {
     dropoutConfigs,
     batchNormConfigs,
     flattenConfigs,
+    updateDenseConfig,
   } = useStore();
   
   const [elements, setElements] = useState([]);
@@ -136,6 +139,11 @@ function FlowComponent() {
   // 添加TensorBoard启动状态
   const [tensorboardStatus, setTensorboardStatus] = useState('idle'); // 'idle', 'loading', 'ready', 'error'
   
+  // 添加悬浮提示状态
+  const [tooltipInfo, setTooltipInfo] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [showTooltip, setShowTooltip] = useState(false);
+  
   // 处理节点之间的连接
   const onConnect = useCallback((params) => {
     // 找到源节点和目标节点
@@ -147,8 +155,23 @@ function FlowComponent() {
     
     // 验证连接是否有效
     if (!isValidConnection(sourceNode.type, targetNode.type)) {
-      // 使用原生alert代替antd的message
-      alert(`Cannot connect ${sourceNode.type} to ${targetNode.type}`);
+      alert(`无法连接 ${sourceNode.type} 到 ${targetNode.type}，层类型不兼容`);
+      return;
+    }
+    
+    // 验证形状兼容性
+    const sourceConfig = getNodeConfig(sourceNode);
+    const targetConfig = getNodeConfig(targetNode);
+    const compatibilityCheck = validateConnection(
+      sourceNode.type, 
+      targetNode.type,
+      sourceConfig,
+      targetConfig
+    );
+    
+    if (!compatibilityCheck.valid) {
+      alert(`连接不兼容: ${compatibilityCheck.message}`);
+      console.warn('形状兼容性问题:', compatibilityCheck);
       return;
     }
     
@@ -160,7 +183,74 @@ function FlowComponent() {
       style: { stroke: '#3b82f6' }
     }, eds));
     
+    // 检测并标记输出层
+    setTimeout(() => {
+      markOutputLayer();
+    }, 100);
+    
   }, [elements]);
+
+  // 标记输出层
+  const markOutputLayer = useCallback(() => {
+    // 找出所有Dense节点
+    const denseNodes = elements.filter(node => node.type === 'dense');
+    if (denseNodes.length === 0) return;
+    
+    // 找出没有出边的节点
+    const nodesWithoutOutEdges = elements.filter(node => {
+      return !edges.some(edge => edge.source === node.id);
+    });
+    
+    // 找出最后一个Dense节点（没有出边的Dense节点）
+    const outputDenseNodes = denseNodes.filter(node => 
+      nodesWithoutOutEdges.some(n => n.id === node.id)
+    );
+    
+    if (outputDenseNodes.length > 0) {
+      // 对每个找到的输出层Dense节点设置isOutput标志
+      outputDenseNodes.forEach(outputNode => {
+        const index = outputNode.data?.index || 0;
+        // 确保这个节点的Dense配置有正确的单位数（通常为输出类别数量）
+        // 对于分类任务，通常是10（数字识别）或根据任务需要设置
+        if (!denseConfigs[index] || !denseConfigs[index].units) {
+          updateDenseConfig(index, { 
+            units: 10,
+            activation: 'softmax',
+            kernelInitializer: 'varianceScaling',
+            isOutput: true
+          });
+          console.log(`标记Dense节点 ${outputNode.id} 为输出层，并设置默认单位为10`);
+        }
+      });
+    }
+  }, [elements, edges, denseConfigs, updateDenseConfig]);
+
+  // 在元素变化后标记输出层
+  useEffect(() => {
+    markOutputLayer();
+  }, [markOutputLayer, elements.length, edges.length]);
+
+  // 获取节点配置的辅助函数
+  const getNodeConfig = useCallback((node) => {
+    const { type, data } = node;
+    const index = data?.index || 0;
+    let config = { ...data };
+    
+    switch (type) {
+      case 'conv2d':
+        config = { ...config, ...conv2dConfigs[index] };
+        break;
+      case 'maxPooling2d':
+        config = { ...config, ...maxPooling2dConfigs[index] };
+        break;
+      case 'dense':
+        config = { ...config, ...denseConfigs[index] };
+        break;
+      // 其他层类型...
+    }
+    
+    return config;
+  }, [conv2dConfigs, maxPooling2dConfigs, denseConfigs]);
 
   // 处理节点变化
   const onNodesChange = useCallback((changes) => {
@@ -219,90 +309,136 @@ function FlowComponent() {
 
   // 生成TensorFlow.js代码
   const generateCode = useCallback(() => {
-    // 添加调试信息
-    console.log("生成代码 - 当前节点:", elements);
-    console.log("生成代码 - 当前连接:", edges);
+    console.log('生成代码 - 当前节点:', elements);
+    console.log('生成代码 - 当前连接:', edges);
     
-    // 验证模型结构
-    const validation = validateModelStructure(elements, edges);
-    console.log("验证结果:", validation);
+    // 先验证模型结构
+    const validationResult = validateModelStructure(elements, edges);
+    console.log('验证结果:', validationResult);
     
-    if (!validation.valid) {
-      console.error("模型验证失败:", validation.message);
-      alert(validation.message);
+    if (!validationResult.valid) {
+      alert(`模型验证失败: ${validationResult.message}`);
       return;
     }
     
-    console.log("模型验证通过");
+    // 在验证通过后才执行代码生成
+    // 收集模型结构数据
+    const finalStructure = [];
     
-    // 添加原始节点中的数据源节点和特殊节点
-    const dataSourceNodes = elements.filter(node => 
-      node.type === 'mnist' || node.type === 'useData'
-    ).map(node => ({
-      type: node.type,
-      config: node.data || { sequenceId: node.data?.sequenceId || 0 }
-    }));
-    
-    console.log("数据源节点:", dataSourceNodes);
-    
-    // 从图生成有序的模型结构（不包含数据源）
-    const modelStructure = generateModelStructureFromGraph(elements, edges);
-    console.log("生成的模型结构:", modelStructure);
-    
-    if (modelStructure.length === 0) {
-      console.error("无法生成有效的模型结构");
-      alert("无法生成有效的模型结构，请确保您的模型连接正确");
-      return;
+    // 保证全局变量可获取到当前Store
+    if (typeof window !== 'undefined') {
+      window.useStore = useStore;
     }
     
-    // 从配置中填充具体的配置参数
-    const detailedStructure = modelStructure.map(node => {
-      let config = {};
-      
-      if (node.type === 'conv2d') {
-        const index = node.config.index;
-        config = conv2dConfigs[index] || {};
+    // 遍历节点
+    elements.forEach(node => {
+      if (node.type === 'mnist' || node.type === 'useData') {
+        // 添加数据源节点
+        finalStructure.push({
+          type: node.type,
+          config: { sequenceId: node.data?.sequenceId || 0 }
+        });
+      } else if (node.type === 'conv2d') {
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'conv2d',
+          config: { 
+            ...node.data,
+            ...conv2dConfigs[index] 
+          }
+        });
       } else if (node.type === 'maxPooling2d') {
-        const index = node.config.index;
-        config = maxPooling2dConfigs[index] || {};
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'maxPooling2d',
+          config: { 
+            ...node.data,
+            ...maxPooling2dConfigs[index] 
+          }
+        });
       } else if (node.type === 'dense') {
-        const index = node.config.index;
-        config = denseConfigs[index] || {};
-      } else if (node.type === 'reshape') {
-        const index = node.config.index;
-        config = reshapeConfigs[index] || {};
-      } else if (node.type === 'lstm') {
-        const index = node.config.index;
-        config = lstmConfigs[index] || {};
-      } else if (node.type === 'gru') {
-        const index = node.config.index;
-        config = gruConfigs[index] || {};
-      } else if (node.type === 'activation') {
-        const index = node.config.index;
-        config = activationConfigs[index] || {};
-      } else if (node.type === 'avgPooling2d') {
-        const index = node.config.index;
-        config = avgPooling2dConfigs[index] || {};
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'dense',
+          config: { 
+            ...node.data,
+            ...denseConfigs[index] 
+          }
+        });
       } else if (node.type === 'dropout') {
-        const index = node.config.index;
-        config = dropoutConfigs[index] || {};
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'dropout',
+          config: { 
+            ...node.data,
+            ...dropoutConfigs[index] 
+          }
+        });
       } else if (node.type === 'batchNorm') {
-        const index = node.config.index;
-        config = batchNormConfigs[index] || {};
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'batchNorm',
+          config: { 
+            ...node.data,
+            ...batchNormConfigs[index] 
+          }
+        });
       } else if (node.type === 'flatten') {
-        const index = node.config.index;
-        config = flattenConfigs[index] || {};
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'flatten',
+          config: { 
+            ...node.data,
+            ...flattenConfigs[index] 
+          }
+        });
+      } else if (node.type === 'activation') {
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'activation',
+          config: { 
+            ...node.data,
+            ...activationConfigs[index] 
+          }
+        });
+      } else if (node.type === 'avgPooling2d') {
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'avgPooling2d',
+          config: { 
+            ...node.data,
+            ...avgPooling2dConfigs[index] 
+          }
+        });
+      } else if (node.type === 'lstm') {
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'lstm',
+          config: { 
+            ...node.data,
+            ...lstmConfigs[index] 
+          }
+        });
+      } else if (node.type === 'gru') {
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'gru',
+          config: { 
+            ...node.data,
+            ...gruConfigs[index] 
+          }
+        });
+      } else if (node.type === 'reshape') {
+        const index = node.data?.index || 0;
+        finalStructure.push({
+          type: 'reshape',
+          config: { 
+            ...node.data,
+            ...reshapeConfigs[index] 
+          }
+        });
       }
-      
-      return {
-        type: node.type,
-        config: { ...node.config, ...config }
-      };
     });
-    
-    // 添加数据源节点
-    const finalStructure = [...dataSourceNodes, ...detailedStructure];
-    console.log("最终结构:", finalStructure);
     
     // 生成代码，传入edges参数
     const code = generateModelCode(finalStructure, edges);
@@ -546,6 +682,36 @@ function FlowComponent() {
     }
   }, []);
 
+  // 处理节点悬停
+  const onNodeMouseEnter = useCallback((event, node) => {
+    // 生成节点信息
+    const layerInfo = generateLayerTooltip(node, {
+      conv2dConfigs,
+      maxPooling2dConfigs,
+      denseConfigs,
+      reshapeConfigs,
+      lstmConfigs,
+      gruConfigs,
+      activationConfigs,
+      avgPooling2dConfigs,
+      dropoutConfigs,
+      batchNormConfigs,
+      flattenConfigs
+    });
+    
+    setTooltipInfo(layerInfo);
+    setTooltipPosition({ 
+      x: event.clientX, 
+      y: event.clientY 
+    });
+    setShowTooltip(true);
+  }, [conv2dConfigs, maxPooling2dConfigs, denseConfigs, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
+  
+  // 处理节点离开
+  const onNodeMouseLeave = useCallback(() => {
+    setShowTooltip(false);
+  }, []);
+
   return (
     <div className="relative w-full h-[90vh] min-h-[700px]" ref={reactFlowWrapper}>
       <ReactFlow
@@ -565,6 +731,9 @@ function FlowComponent() {
         fitView
         style={rfStyle}
         deleteKeyCode="Delete"
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onPaneClick={() => setShowTooltip(false)}
       >
         <Background color="#d1d1d6" gap={16} variant="dots" />
         <MiniMap 
@@ -665,6 +834,13 @@ function FlowComponent() {
           </div>
         </div>
       )}
+      
+      {/* 层信息悬浮提示 */}
+      <LayerTooltip 
+        layerInfo={tooltipInfo}
+        visible={showTooltip}
+        position={tooltipPosition}
+      />
     </div>
   );
 }

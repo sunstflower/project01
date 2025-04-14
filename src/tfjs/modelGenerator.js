@@ -2,6 +2,9 @@
  * 模型生成器 - 将可视化模型结构转换为TensorFlow.js代码
  */
 
+// 导入层验证工具
+import { getLayerDescription } from '@/utils/layerValidation';
+
 // 生成模型代码
 export const generateModelCode = (modelStructure, edges) => {
     console.log('generateModelCode 接收到的模型结构:', modelStructure);
@@ -793,83 +796,200 @@ export const generateModelCode = (modelStructure, edges) => {
     return `'${type}'`;
   };
   
-  // 整体模型定义和图连接验证
-  export const validateModelStructure = (nodes, edges) => {
+  /**
+   * 验证模型结构的有效性
+   * @param {Array} nodes 节点列表
+   * @param {Array} edges 连接列表
+   * @returns {Object} 验证结果，包含valid和message字段
+   */
+  export function validateModelStructure(nodes, edges) {
+    // 检查是否有节点
     if (!nodes || nodes.length === 0) {
-      return { valid: false, message: 'Model is empty, please add at least one component' };
-    }
-  
-    // 定义有效的模型层类型
-    const validLayerTypes = [
-      'conv2d',
-      'maxPooling2d',
-      'avgPooling2d',
-      'dense',
-      'dropout',
-      'batchNorm',
-      'flatten',
-      'lstm',
-      'gru',
-      'activation',
-      'reshape',
-      'mnist',
-      'useData'
-    ];
-    
-    // 过滤出有效的模型层节点
-    const validNodes = nodes.filter(node => validLayerTypes.includes(node.type));
-    
-    // 输出调试信息
-    console.log('所有节点:', nodes.map(n => `${n.id}(${n.type})`).join(', '));
-    console.log('有效节点:', validNodes.map(n => `${n.id}(${n.type})`).join(', '));
-    
-    // 如果没有有效的模型层节点，返回错误
-    if (validNodes.length === 0) {
-      return { valid: false, message: 'Model is empty, please add at least one valid component' };
-    }
-
-    // 检查是否有未连接的节点
-    const connectedNodes = new Set();
-    edges.forEach(edge => {
-      connectedNodes.add(edge.source);
-      connectedNodes.add(edge.target);
-    });
-    
-    console.log('已连接节点:', Array.from(connectedNodes).join(', '));
-    
-    // 如果只有一个节点，不需要检查连接
-    if (validNodes.length === 1) {
-      return { valid: true };
+      return { valid: false, message: "模型为空，请添加至少一个层" };
     }
     
-    // 检查是否所有非数据源节点都已连接
-    // 只检查有效的模型层节点
-    const unconnectedNodes = validNodes.filter(node => {
-      // 数据源节点可以没有入边
-      if (node.type === 'mnist' || node.type === 'useData') {
-        return false;
-      }
-      // 其他节点必须有连接
-      return !connectedNodes.has(node.id);
-    });
+    // 检查是否有数据源节点
+    const dataNodes = nodes.filter(node => node.type === 'mnist' || node.type === 'useData');
+    if (dataNodes.length === 0) {
+      return { valid: false, message: "缺少数据源节点，请添加MNIST或自定义数据源" };
+    }
     
-    console.log('未连接的有效节点:', unconnectedNodes.map(n => `${n.id}(${n.type})`).join(', '));
+    // 检查是否有多个数据源节点
+    if (dataNodes.length > 1) {
+      return { valid: false, message: "模型中只能有一个数据源节点" };
+    }
     
-    if (unconnectedNodes.length > 0) {
-      return {
-        valid: false,
-        message: `Unconnected nodes found: ${unconnectedNodes.map(n => n.type).join(', ')}`
+    // 检查是否有处理层
+    const processingNodes = nodes.filter(node => 
+      !['mnist', 'useData', 'trainButton'].includes(node.type)
+    );
+    if (processingNodes.length === 0) {
+      return { valid: false, message: "模型缺少处理层，请添加至少一个处理层" };
+    }
+    
+    // 检查最后一层是否是Dense层（输出层）
+    const lastProcessingNode = findLastProcessingNode(nodes, edges);
+    if (!lastProcessingNode) {
+      return { valid: false, message: "无法确定模型的最后一层" };
+    }
+    
+    if (lastProcessingNode.type !== 'dense') {
+      return { 
+        valid: false, 
+        message: "模型的最后一层应该是Dense层作为输出层"
       };
     }
-
-    // 检查是否已进行连接
-    const hasConnection = edges.length > 0;
-    if (!hasConnection) {
-      return { valid: false, message: 'No connections between nodes, please connect your layers' };
+    
+    // 验证所有层都连接到了模型中
+    const connectedNodes = getConnectedNodes(dataNodes[0], nodes, edges);
+    const disconnectedNodes = nodes.filter(node => 
+      node.type !== 'trainButton' && 
+      !connectedNodes.some(cn => cn.id === node.id)
+    );
+    
+    if (disconnectedNodes.length > 0) {
+      const nodeTypes = disconnectedNodes.map(n => n.type).join(', ');
+      return { 
+        valid: false, 
+        message: `模型中有未连接的层: ${nodeTypes}` 
+      };
     }
-
-    return { valid: true };
-  };
+    
+    // 验证是否有循环连接
+    const hasCycle = detectCycle(nodes, edges);
+    if (hasCycle) {
+      return { valid: false, message: "模型中存在循环连接，请移除循环" };
+    }
+    
+    // 验证输出层设置
+    const outputNode = lastProcessingNode;
+    if (outputNode && outputNode.type === 'dense') {
+      const index = outputNode.data?.index || 0;
+      
+      // 从useStore获取配置而不是window对象
+      const store = typeof window !== 'undefined' && window.useStore ? window.useStore.getState() : null;
+      const denseConfigs = store ? store.denseConfigs : [];
+      
+      console.log('验证Dense层配置:', { index, configs: denseConfigs });
+      
+      const config = denseConfigs[index] || {};
+      
+      if (!config.units) {
+        return { 
+          valid: false, 
+          message: "输出层(Dense)未设置神经元数量，请配置输出层"
+        };
+      }
+    }
+    
+    return { valid: true, message: "模型结构有效" };
+  }
+  
+  /**
+   * 查找模型的最后一个处理层
+   * @param {Array} nodes 节点列表
+   * @param {Array} edges 连接列表
+   * @returns {Object} 最后一个处理层节点
+   */
+  function findLastProcessingNode(nodes, edges) {
+    // 找出所有没有出边的节点（不包括trainButton）
+    const nodeIds = nodes.map(node => node.id);
+    const nodesWithOutEdges = nodeIds.filter(id => {
+      return !edges.some(edge => edge.source === id);
+    });
+    
+    // 从这些节点中找出不是trainButton的处理层
+    const lastNodes = nodes.filter(node => 
+      nodesWithOutEdges.includes(node.id) && 
+      node.type !== 'trainButton'
+    );
+    
+    if (lastNodes.length === 0) {
+      return null;
+    }
+    
+    return lastNodes[0];
+  }
+  
+  /**
+   * 获取从源节点可达的所有节点
+   * @param {Object} startNode 起始节点
+   * @param {Array} nodes 所有节点
+   * @param {Array} edges 所有连接
+   * @returns {Array} 可达节点列表
+   */
+  function getConnectedNodes(startNode, nodes, edges) {
+    const connected = [startNode];
+    let changed = true;
+    
+    while (changed) {
+      changed = false;
+      
+      for (const edge of edges) {
+        const sourceConnected = connected.some(node => node.id === edge.source);
+        const targetNode = nodes.find(node => node.id === edge.target);
+        const targetConnected = connected.some(node => node.id === edge.target);
+        
+        if (sourceConnected && targetNode && !targetConnected) {
+          connected.push(targetNode);
+          changed = true;
+        }
+      }
+    }
+    
+    return connected;
+  }
+  
+  /**
+   * 检测模型中是否存在循环
+   * @param {Array} nodes 节点列表
+   * @param {Array} edges 连接列表
+   * @returns {Boolean} 是否存在循环
+   */
+  function detectCycle(nodes, edges) {
+    // 创建邻接表
+    const adjacencyList = {};
+    nodes.forEach(node => {
+      adjacencyList[node.id] = [];
+    });
+    
+    edges.forEach(edge => {
+      if (adjacencyList[edge.source]) {
+        adjacencyList[edge.source].push(edge.target);
+      }
+    });
+    
+    // DFS检测循环
+    const visited = {};
+    const recStack = {};
+    
+    function isCyclicUtil(nodeId) {
+      if (!visited[nodeId]) {
+        visited[nodeId] = true;
+        recStack[nodeId] = true;
+        
+        const neighbors = adjacencyList[nodeId] || [];
+        for (const neighbor of neighbors) {
+          if (!visited[neighbor] && isCyclicUtil(neighbor)) {
+            return true;
+          } else if (recStack[neighbor]) {
+            return true;
+          }
+        }
+      }
+      
+      recStack[nodeId] = false;
+      return false;
+    }
+    
+    for (const node of nodes) {
+      if (isCyclicUtil(node.id)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
   
   // 从图结构生成模型层次结构
   export function generateModelStructureFromGraph(nodes, edges) {
@@ -1046,4 +1166,93 @@ export const generateModelCode = (modelStructure, edges) => {
 
     console.log('最终模型结构:', modelStructure);
     return modelStructure;
+  }
+
+  /**
+   * 生成层的详细信息用于显示悬浮提示
+   * @param {Object} node 节点对象
+   * @param {Object} configs 配置对象
+   * @returns {Object} 层信息，包含名称、描述、参数和输入/输出形状
+   */
+  export function generateLayerTooltip(node, allConfigs) {
+    if (!node) return null;
+    
+    const { type, data } = node;
+    const index = data?.index || 0;
+    
+    // 获取层的配置
+    let config = {};
+    switch (type) {
+      case 'conv2d':
+        config = allConfigs.conv2dConfigs?.[index] || {};
+        break;
+      case 'maxPooling2d':
+        config = allConfigs.maxPooling2dConfigs?.[index] || {};
+        break;
+      case 'dense':
+        config = allConfigs.denseConfigs?.[index] || {};
+        break;
+      // 其他层类型...
+      default:
+        config = {};
+    }
+    
+    // 构建层描述
+    const description = getLayerDescription(type);
+    
+    // 构建参数列表
+    const params = Object.entries(config)
+      .filter(([key]) => !['index', 'sequenceId'].includes(key))
+      .map(([key, value]) => {
+        // 格式化参数名称
+        const formattedKey = key.replace(/([A-Z])/g, ' $1').toLowerCase();
+        const formattedName = formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1);
+        
+        return {
+          name: formattedName,
+          value: Array.isArray(value) ? `[${value.join(', ')}]` : value
+        };
+      });
+    
+    // 构建输入/输出形状描述
+    let inputShape = 'Unknown';
+    let outputShape = 'Unknown';
+    
+    // 根据不同层类型描述形状
+    switch (type) {
+      case 'mnist':
+        inputShape = 'None';
+        outputShape = '[batch, 28, 28, 1]';
+        break;
+      case 'useData':
+        inputShape = 'None';
+        outputShape = '[batch, height, width, channels]';
+        break;
+      case 'conv2d':
+        inputShape = '[batch, height, width, channels]';
+        outputShape = '[batch, height, width, filters]';
+        break;
+      case 'maxPooling2d':
+      case 'avgPooling2d':
+        inputShape = '[batch, height, width, channels]';
+        outputShape = '[batch, height/poolSize, width/poolSize, channels]';
+        break;
+      case 'flatten':
+        inputShape = '[batch, height, width, channels]';
+        outputShape = '[batch, features]';
+        break;
+      case 'dense':
+        inputShape = '[batch, features]';
+        outputShape = `[batch, ${config.units || '?'}]`;
+        break;
+      // 其他层类型...
+    }
+    
+    return {
+      name: `${description} (${type})`,
+      description,
+      params,
+      inputShape,
+      outputShape
+    };
   } 

@@ -21,7 +21,7 @@ try:
     import tensorflow as tf
     logger.info(f"TensorFlow版本: {tf.__version__}")
 except ImportError:
-    logger.error("未安装TensorFlow，请运行: pip install tensorflow>=2.4.0")
+    logger.error("未安装TensorFlow,请运行: pip install tensorflow>=2.4.0")
     sys.exit(1)
 
 def create_model_from_data(model_data):
