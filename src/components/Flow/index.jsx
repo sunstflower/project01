@@ -133,6 +133,9 @@ function FlowComponent() {
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   
+  // 添加TensorBoard启动状态
+  const [tensorboardStatus, setTensorboardStatus] = useState('idle'); // 'idle', 'loading', 'ready', 'error'
+  
   // 处理节点之间的连接
   const onConnect = useCallback((params) => {
     // 找到源节点和目标节点
@@ -525,6 +528,24 @@ function FlowComponent() {
     }),
   });
 
+  // 处理打开TensorBoard
+  const openTensorboard = useCallback(async () => {
+    try {
+      setTensorboardStatus('loading');
+      
+      // 直接提示用户使用TensorBoard
+      alert('请按照以下步骤操作：\n\n1. 确保Python环境已安装TensorFlow和TensorBoard\n2. 运行命令: python -m tensorboard.main --logdir=./logs\n3. 在浏览器中打开 http://localhost:6006 查看TensorBoard');
+      
+      // 自动打开TensorBoard URL
+      window.open('http://localhost:6006', '_blank');
+      
+      setTensorboardStatus('ready');
+    } catch (error) {
+      console.error('TensorBoard操作错误:', error);
+      setTensorboardStatus('error');
+    }
+  }, []);
+
   return (
     <div className="relative w-full h-[90vh] min-h-[700px]" ref={reactFlowWrapper}>
       <ReactFlow
@@ -579,12 +600,29 @@ function FlowComponent() {
           </div>
         </Panel>
         <Panel position="bottom-center">
-          <button 
-            onClick={generateCode}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5"
-          >
-            Generate TensorFlow.js Code
-          </button>
+          <div className="flex space-x-4">
+            <button 
+              onClick={generateCode}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5"
+            >
+              Generate TensorFlow.js Code
+            </button>
+            <button 
+              onClick={openTensorboard}
+              disabled={tensorboardStatus === 'loading'}
+              className={`${
+                tensorboardStatus === 'loading' 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-green-500 hover:bg-green-600'
+              } text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5`}
+            >
+              {tensorboardStatus === 'loading' 
+                ? '准备中...' 
+                : tensorboardStatus === 'ready' 
+                  ? '在TensorBoard中查看' 
+                  : '查看TensorBoard'}
+            </button>
+          </div>
         </Panel>
       </ReactFlow>
       
