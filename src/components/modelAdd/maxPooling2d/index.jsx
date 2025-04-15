@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import NodeContainer from '../NodeContainer';
 import useStore from '@/store';
 
 const POOL_SIZE_OPTIONS = [
@@ -82,17 +82,7 @@ function MaxPooling2DNode({ data }) {
   };
 
   return (
-    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-blue-100">
-      <div className="text-lg font-medium text-gray-800 mb-4 bg-blue-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
-        Max Pooling 2D 层
-      </div>
-      
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-4 h-4 bg-blue-400 rounded-full"
-      />
-      
+    <NodeContainer title="Max Pooling 2D" backgroundColor="blue-50">
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -147,13 +137,7 @@ function MaxPooling2DNode({ data }) {
           </select>
         </div>
       </div>
-      
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="w-4 h-4 bg-blue-400 rounded-full"
-      />
-    </div>
+    </NodeContainer>
   );
 }
 

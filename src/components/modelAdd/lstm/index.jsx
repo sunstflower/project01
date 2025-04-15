@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import NodeContainer from '../NodeContainer';
 import useStore from '@/store';
 
 function LSTMNode({ data }) {
@@ -58,17 +58,7 @@ function LSTMNode({ data }) {
   };
 
   return (
-    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-blue-200">
-      <div className="text-lg font-medium text-gray-800 mb-4 bg-blue-200 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
-        LSTM 层
-      </div>
-      
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-4 h-4 bg-blue-500 rounded-full"
-      />
-      
+    <NodeContainer title="LSTM" backgroundColor="blue-50">
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">单元数量:</label>
@@ -176,14 +166,7 @@ function LSTMNode({ data }) {
           </p>
         </div>
       </div>
-      
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="a"
-        className="w-4 h-4 bg-blue-500 rounded-full"
-      />
-    </div>
+    </NodeContainer>
   );
 }
 

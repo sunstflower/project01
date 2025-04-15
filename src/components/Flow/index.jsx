@@ -14,7 +14,7 @@ import {
 import './dist.css';
 import { useDrop } from 'react-dnd';
 import { generateModelCode, validateModelStructure, generateModelStructureFromGraph, generateLayerTooltip } from '@/tfjs/modelGenerator';
-import { validateConnection } from '@/utils/layerValidation';
+import { validateConnection, calculateModelShapes, getLayerShapeDescription, getLayerDescription } from '@/utils/layerValidation';
 import LayerTooltip from '../Tooltip/LayerTooltip';
 
 import UseData from '../UseData';
@@ -159,19 +159,77 @@ function FlowComponent() {
       return;
     }
     
-    // 验证形状兼容性
-    const sourceConfig = getNodeConfig(sourceNode);
-    const targetConfig = getNodeConfig(targetNode);
-    const compatibilityCheck = validateConnection(
-      sourceNode.type, 
-      targetNode.type,
-      sourceConfig,
-      targetConfig
-    );
+    // 计算模型中所有节点的形状
+    const allNodes = [...elements, targetNode];
+    const allEdges = [...edges, { source: sourceNode.id, target: targetNode.id }];
+    const shapeMap = calculateModelShapes(allNodes, allEdges);
     
-    if (!compatibilityCheck.valid) {
-      alert(`连接不兼容: ${compatibilityCheck.message}`);
-      console.warn('形状兼容性问题:', compatibilityCheck);
+    // 检查目标节点是否有形状错误
+    if (shapeMap[targetNode.id]?.error) {
+      const errorMsg = shapeMap[targetNode.id].error;
+      alert(`形状不兼容: ${errorMsg}`);
+      console.warn('形状兼容性问题:', shapeMap[targetNode.id]);
+      
+      // 如果检测到需要添加Flatten层
+      if (shapeMap[targetNode.id].needsFlatten) {
+        const addFlattenConfirm = window.confirm(
+          `Dense层需要2D输入，但前一层输出为高维张量。\n` +
+          `是否自动添加Flatten层解决兼容性问题？`
+        );
+        
+        if (addFlattenConfirm) {
+          // 自动添加Flatten层
+          const flattenTimestamp = Date.now();
+          const flattenId = `flatten-${flattenTimestamp}`;
+          
+          // 创建Flatten节点
+          const flattenNode = {
+            id: flattenId,
+            type: 'flatten',
+            data: { 
+              index: flattenConfigs.length, 
+              sequenceId: elements.length
+            },
+            position: {
+              x: (sourceNode.position.x + targetNode.position.x) / 2,
+              y: (sourceNode.position.y + targetNode.position.y) / 2 - 50
+            }
+          };
+          
+          // 添加Flatten层节点
+          setElements(els => [...els, flattenNode]);
+          
+          // 创建从源节点到Flatten的连接
+          setEdges(eds => [
+            ...eds, 
+            {
+              id: `e-${sourceNode.id}-${flattenId}`,
+              source: sourceNode.id,
+              target: flattenId,
+              type: 'smoothstep',
+              animated: true,
+              style: { stroke: '#3b82f6' }
+            }
+          ]);
+          
+          // 创建从Flatten到目标节点的连接
+          setTimeout(() => {
+            setEdges(eds => [
+              ...eds, 
+              {
+                id: `e-${flattenId}-${targetNode.id}`,
+                source: flattenId,
+                target: targetNode.id,
+                type: 'smoothstep',
+                animated: true,
+                style: { stroke: '#3b82f6' }
+              }
+            ]);
+          }, 100);
+          
+          return;
+        }
+      }
       return;
     }
     
@@ -188,7 +246,7 @@ function FlowComponent() {
       markOutputLayer();
     }, 100);
     
-  }, [elements]);
+  }, [elements, edges, flattenConfigs]);
 
   // 标记输出层
   const markOutputLayer = useCallback(() => {
@@ -682,35 +740,102 @@ function FlowComponent() {
     }
   }, []);
 
-  // 处理节点悬停
-  const onNodeMouseEnter = useCallback((event, node) => {
-    // 生成节点信息
-    const layerInfo = generateLayerTooltip(node, {
-      conv2dConfigs,
-      maxPooling2dConfigs,
-      denseConfigs,
-      reshapeConfigs,
-      lstmConfigs,
-      gruConfigs,
-      activationConfigs,
-      avgPooling2dConfigs,
-      dropoutConfigs,
-      batchNormConfigs,
-      flattenConfigs
+  // 生成节点的悬浮提示信息
+  const handleNodeHover = useCallback((event, node) => {
+    if (!node) {
+      setShowTooltip(false);
+      return;
+    }
+
+    // 计算所有节点的形状
+    const shapeMap = calculateModelShapes(elements, edges);
+    const nodeShapeInfo = shapeMap[node.id];
+    
+    // 准备节点配置
+    let config;
+    switch (node.type) {
+      case 'conv2d':
+        config = conv2dConfigs[node.data.index];
+        break;
+      case 'maxPooling2d':
+        config = maxPooling2dConfigs[node.data.index];
+        break;
+      case 'dense':
+        config = denseConfigs[node.data.index];
+        break;
+      case 'lstm':
+        config = lstmConfigs[node.data.index];
+        break;
+      case 'gru':
+        config = gruConfigs[node.data.index]; 
+        break;
+      case 'activation':
+        config = activationConfigs[node.data.index];
+        break;
+      case 'avgPooling2d':
+        config = avgPooling2dConfigs[node.data.index];
+        break;
+      case 'dropout':
+        config = dropoutConfigs[node.data.index];
+        break;
+      case 'batchNorm':
+        config = batchNormConfigs[node.data.index];
+        break;
+      case 'flatten':
+        config = flattenConfigs[node.data.index];
+        break;
+      case 'reshape':
+        config = reshapeConfigs[node.data.index];
+        break;
+      default:
+        config = {};
+    }
+    
+    // 构建参数列表
+    const params = [];
+    if (config) {
+      Object.entries(config).forEach(([key, value]) => {
+        // 排除一些不需要显示的字段
+        if (key !== 'index' && key !== 'sequenceId') {
+          params.push({ name: key, value: JSON.stringify(value) });
+        }
+      });
+    }
+
+    // 形状信息
+    let inputShape = "未知";
+    let outputShape = "未知";
+    
+    if (nodeShapeInfo) {
+      if (nodeShapeInfo.inputShape) {
+        inputShape = nodeShapeInfo.inputShape.description;
+      }
+      if (nodeShapeInfo.outputShape) {
+        outputShape = nodeShapeInfo.outputShape.description;
+      }
+      if (nodeShapeInfo.error) {
+        outputShape = `错误: ${nodeShapeInfo.error}`;
+      }
+    }
+
+    // 设置提示信息
+    setTooltipInfo({
+      name: getLayerDescription(node.type),
+      description: `${node.type} 节点`,
+      params,
+      inputShape,
+      outputShape
     });
     
-    setTooltipInfo(layerInfo);
-    setTooltipPosition({ 
-      x: event.clientX, 
-      y: event.clientY 
+    // 设置提示位置
+    const rect = event.target.getBoundingClientRect();
+    setTooltipPosition({
+      x: rect.right - (rect.right - rect.left) / 2,
+      y: rect.top + rect.height / 2
     });
+    
     setShowTooltip(true);
-  }, [conv2dConfigs, maxPooling2dConfigs, denseConfigs, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
-  
-  // 处理节点离开
-  const onNodeMouseLeave = useCallback(() => {
-    setShowTooltip(false);
-  }, []);
+  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs, reshapeConfigs]);
 
   return (
     <div className="relative w-full h-[90vh] min-h-[700px]" ref={reactFlowWrapper}>
@@ -731,8 +856,8 @@ function FlowComponent() {
         fitView
         style={rfStyle}
         deleteKeyCode="Delete"
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
+        onNodeMouseEnter={handleNodeHover}
+        onNodeMouseLeave={() => setShowTooltip(false)}
         onPaneClick={() => setShowTooltip(false)}
       >
         <Background color="#d1d1d6" gap={16} variant="dots" />

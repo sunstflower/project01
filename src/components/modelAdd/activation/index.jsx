@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import NodeContainer from '../NodeContainer';
 import useStore from '@/store';
 
 const ACTIVATION_OPTIONS = [
@@ -31,17 +31,7 @@ function ActivationNode({ data }) {
   };
 
   return (
-    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-orange-100">
-      <div className="text-lg font-medium text-gray-800 mb-4 bg-orange-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
-        Activation 层
-      </div>
-      
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-4 h-4 bg-orange-400 rounded-full"
-      />
-      
+    <NodeContainer title="Activation" backgroundColor="orange-50">
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">激活函数:</label>
@@ -67,14 +57,7 @@ function ActivationNode({ data }) {
           </p>
         </div>
       </div>
-      
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="a"
-        className="w-4 h-4 bg-orange-400 rounded-full"
-      />
-    </div>
+    </NodeContainer>
   );
 }
 

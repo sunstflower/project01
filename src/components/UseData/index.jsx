@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import useStore from '@/store';
 import Papa from 'papaparse';
+import { createTensorsFromCSV } from '@/tfjs/data';
 
 function UseData() {
     const { changeData, isData } = useStore();
@@ -11,6 +12,14 @@ function UseData() {
     const [processingStatus, setProcessingStatus] = useState('');
     const [numericColumns, setNumericColumns] = useState([]);
     const [totalColumns, setTotalColumns] = useState(0);
+    
+    // 新增：数据处理选项
+    const [dataOptions, setDataOptions] = useState({
+        targetColumn: '',
+        isTimeSeries: false, 
+        timeSteps: 1,
+        outputShape: '3d'  // 3d输出更适合大多数网络
+    });
 
     const handleSelectChange = (event) => {
         setSelectedOption(event.target.value);
@@ -68,6 +77,14 @@ function UseData() {
         const numericCols = columnNames.filter(col => checkColumnType(data, col));
         setNumericColumns(numericCols);
         
+        // 如果有数值列，默认设置第一个为目标列
+        if (numericCols.length > 0) {
+            setDataOptions(prev => ({
+                ...prev,
+                targetColumn: numericCols[0]
+            }));
+        }
+        
         // 预处理数据 - 确保所有数值列都是数字类型
         const processedData = data.map(row => {
             const processedRow = {...row};
@@ -75,13 +92,6 @@ function UseData() {
                 processedRow[col] = parseFloat(row[col]) || 0;
             });
             return processedRow;
-        });
-
-        // 创建3维数据结构 (样本数, 时间步, 特征数)
-        // 这里我们将每行数据视为一个样本，保持2D结构，但确保可以重塑为3D
-        const reshapedData = processedData.map(row => {
-            // 提取数值列的值作为特征
-            return numericCols.map(col => row[col]);
         });
 
         const summary = {
@@ -115,7 +125,7 @@ function UseData() {
                 
                 const processedData = preprocessCsvData(results.data);
                 
-                // 更新store中的csvData，同时传递处理后的数据
+                // 只存储原始CSV数据，在确认时再处理为张量
                 changeData(processedData);
             },
             error: (error) => {
@@ -125,16 +135,64 @@ function UseData() {
         });
     };
 
+    // 处理数据选项变更
+    const handleOptionsChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setDataOptions(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
+
     const handleConfirm = () => {
-        if (selectedOption === 'handwriting') {
-            // 处理MNIST数据集
-            changeData([]);
-            setProcessingStatus('已选择MNIST数据集');
-        } else if (selectedOption === 'csv' && csvFile) {
-            // CSV数据已经在handleFileUpload中处理
-            setProcessingStatus('已确认使用CSV数据');
-        } else {
-            setProcessingStatus('请先选择或上传数据');
+        try {
+            if (selectedOption === 'handwriting') {
+                // 处理MNIST数据集
+                changeData([]);
+                setProcessingStatus('已选择MNIST数据集');
+            } else if (selectedOption === 'csv' && csvFile) {
+                const processedData = useStore.getState().csvData;
+                
+                if (!processedData || processedData.length === 0) {
+                    setProcessingStatus('没有有效的CSV数据');
+                    return;
+                }
+                
+                // 使用增强的处理函数，创建张量并存储元数据
+                const options = {
+                    ...dataOptions,
+                    timeSteps: parseInt(dataOptions.timeSteps, 10)
+                };
+                
+                console.log('Processing CSV data with options:', options);
+                
+                // 创建张量并保存
+                const tensorData = createTensorsFromCSV(processedData, options);
+                
+                if (tensorData.error) {
+                    throw new Error(tensorData.error.message);
+                }
+                
+                if (!tensorData.xs || !tensorData.labels) {
+                    throw new Error('无法创建有效的张量数据');
+                }
+                
+                console.log('Created tensor data:', tensorData);
+                
+                // 在Store中更新数据
+                changeData({
+                    ...tensorData,
+                    originalData: processedData,
+                    options: options
+                });
+                
+                setProcessingStatus(`已处理CSV数据，创建了形状为 ${tensorData.xs.shape} 的输入张量`);
+            } else {
+                setProcessingStatus('请先选择或上传数据');
+            }
+        } catch (error) {
+            console.error('Error processing data:', error);
+            setProcessingStatus(`数据处理错误: ${error.message}`);
         }
     };
 
@@ -168,14 +226,88 @@ function UseData() {
                         )}
                         
                         {csvSummary && (
-                            <div className="mt-3 p-3 bg-gray-50 rounded-md text-sm">
-                                <h4 className="font-medium text-gray-700 mb-1">CSV数据摘要:</h4>
-                                <p className="text-gray-600">行数: {csvSummary.totalRows}</p>
-                                <p className="text-gray-600">数值列: {csvSummary.numericColumns} / {csvSummary.totalColumns}</p>
-                                <p className="text-gray-600 mb-2">特征维度: {numericColumns.length}</p>
-                                <p className="text-gray-600 text-xs">
-                                    <span className="font-medium">可用于训练的列:</span> {numericColumns.join(', ')}
-                                </p>
+                            <div className="mt-3 mb-4">
+                                <div className="p-3 bg-gray-50 rounded-md text-sm">
+                                    <h4 className="font-medium text-gray-700 mb-1">CSV数据摘要:</h4>
+                                    <p className="text-gray-600">行数: {csvSummary.totalRows}</p>
+                                    <p className="text-gray-600">数值列: {csvSummary.numericColumns} / {csvSummary.totalColumns}</p>
+                                    <p className="text-gray-600 mb-2">特征维度: {numericColumns.length}</p>
+                                    <p className="text-gray-600 text-xs">
+                                        <span className="font-medium">可用于训练的列:</span> {numericColumns.join(', ')}
+                                    </p>
+                                </div>
+                                
+                                {/* 数据处理选项 */}
+                                <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                                    <h4 className="font-medium text-blue-700 mb-2">数据处理选项:</h4>
+                                    
+                                    {/* 目标列选择 */}
+                                    <div className="mb-3">
+                                        <label className="block text-sm text-gray-700 mb-1">目标列:</label>
+                                        <select 
+                                            name="targetColumn"
+                                            value={dataOptions.targetColumn}
+                                            onChange={handleOptionsChange}
+                                            className="w-full px-2 py-1 text-sm border rounded"
+                                        >
+                                            {numericColumns.map(col => (
+                                                <option key={col} value={col}>{col}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">模型将预测此列值</p>
+                                    </div>
+                                    
+                                    {/* 时间序列选项 */}
+                                    <div className="mb-3">
+                                        <div className="flex items-center mb-1">
+                                            <input 
+                                                type="checkbox"
+                                                id="isTimeSeries"
+                                                name="isTimeSeries"
+                                                checked={dataOptions.isTimeSeries}
+                                                onChange={handleOptionsChange}
+                                                className="mr-2"
+                                            />
+                                            <label htmlFor="isTimeSeries" className="text-sm text-gray-700">
+                                                时间序列数据
+                                            </label>
+                                        </div>
+                                        
+                                        {dataOptions.isTimeSeries && (
+                                            <div className="ml-5 mt-1">
+                                                <label className="block text-sm text-gray-700 mb-1">
+                                                    时间步数:
+                                                </label>
+                                                <input 
+                                                    type="number"
+                                                    name="timeSteps"
+                                                    value={dataOptions.timeSteps}
+                                                    onChange={handleOptionsChange}
+                                                    min="1"
+                                                    max="10"
+                                                    className="w-20 px-2 py-1 text-sm border rounded"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* 输出形状选项 */}
+                                    <div className="mb-2">
+                                        <label className="block text-sm text-gray-700 mb-1">输出形状:</label>
+                                        <select 
+                                            name="outputShape"
+                                            value={dataOptions.outputShape}
+                                            onChange={handleOptionsChange}
+                                            className="w-full px-2 py-1 text-sm border rounded"
+                                        >
+                                            <option value="2d">2D (样本, 特征)</option>
+                                            <option value="3d">3D (样本, 时间步, 特征)</option>
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            3D形状适用于CNN/RNN, 2D形状适用于Dense网络
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>

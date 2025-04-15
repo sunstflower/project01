@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import NodeContainer from '../NodeContainer';
 import useStore from '@/store';
 
 const POOL_SIZE_OPTIONS = [
@@ -45,17 +45,7 @@ function AvgPooling2DNode({ data }) {
   };
 
   return (
-    <div className="bg-white shadow-lg rounded-lg p-6 w-80 border border-purple-100">
-      <div className="text-lg font-medium text-gray-800 mb-4 bg-purple-100 -mx-6 -mt-6 px-6 py-3 rounded-t-lg">
-        Average Pooling 2D 层
-      </div>
-      
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-4 h-4 bg-purple-400 rounded-full"
-      />
-      
+    <NodeContainer title="Average Pooling 2D" backgroundColor="purple-50">
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -110,14 +100,7 @@ function AvgPooling2DNode({ data }) {
           </p>
         </div>
       </div>
-      
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="a"
-        className="w-4 h-4 bg-purple-400 rounded-full"
-      />
-    </div>
+    </NodeContainer>
   );
 }
 

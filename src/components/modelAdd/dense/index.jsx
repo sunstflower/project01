@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import NodeContainer from '../NodeContainer';
 import useStore from '@/store'; 
 
 function DenseNode({ data }) {
@@ -37,12 +37,7 @@ function DenseNode({ data }) {
     const config = denseConfigs[configIndex] || { units: 128, activation: 'relu', kernelInitializer: 'varianceScaling' };
 
     return (
-        <div className="text-updater-node bg-white shadow-lg rounded-lg p-6 w-80">
-            <Handle
-                type="target"
-                position={Position.Top}
-                className='w-4 h-4 bg-gray-300 rounded-full'
-            />
+        <NodeContainer title="Dense" backgroundColor="white">
             <div>
                 <label htmlFor="unitsInput" className="block text-sm font-medium text-gray-700">神经元数量 (Units):</label>
                 <input 
@@ -51,7 +46,7 @@ function DenseNode({ data }) {
                     type="number" 
                     value={config.units || 128} 
                     onChange={(e) => updateDenseConfig(configIndex, { units: parseInt(e.target.value, 10) })} 
-                    className="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;"
+                    className="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 
                 <label htmlFor="activationSelect" className="block text-sm font-medium text-gray-700 mt-4">激活函数 (Activation):</label>
@@ -86,13 +81,7 @@ function DenseNode({ data }) {
                     <option value="ones">Ones</option>
                 </select>
             </div>
-            <Handle
-                type="source"
-                position={Position.Bottom}
-                id="a"
-                className='w-4 h-4 bg-gray-300 rounded-full'
-            />
-        </div>
+        </NodeContainer>
     );
 }
 

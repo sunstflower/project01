@@ -3,7 +3,7 @@
  */
 
 // 导入层验证工具
-import { getLayerDescription } from '@/utils/layerValidation';
+import { getLayerDescription, calculateModelShapes } from '@/utils/layerValidation';
 
 // 生成模型代码
 export const generateModelCode = (modelStructure, edges) => {
@@ -42,6 +42,10 @@ export const generateModelCode = (modelStructure, edges) => {
     if (validModelStructure.length === 0) {
       return '// Please add valid model components before generating code';
     }
+
+    // 计算完整模型的形状信息
+    const shapeMap = calculateModelShapes(modelStructure, edges);
+    console.log('形状映射:', shapeMap);
   
     let code = `
   // TensorFlow.js Model Definition
@@ -50,10 +54,24 @@ export const generateModelCode = (modelStructure, edges) => {
     
     const model = tf.sequential();
     
-    // 设置输入特征数量 - 根据您的数据调整这个值
-    const inputFeatures = 4; // 降水量、最高温度、最低温度、风速
+    // 设置输入特征数量 - 根据数据源类型自动配置
+    let inputFeatures = 4; // 默认值
+    let inputShape = null; // 将由第一层设置
     
   `;
+
+    // 根据数据源设置合适的输入形状
+    if (hasMnistDataset) {
+      code += `    // MNIST输入形状: [28, 28, 1]
+    inputShape = [28, 28, 1];
+    console.log('Using MNIST dataset with input shape:', inputShape);
+    `;
+    } else if (hasCsvDataset) {
+      code += `    // CSV数据输入形状: 使用配置的特征数
+    inputShape = [inputFeatures];
+    console.log('Using CSV dataset with input shape:', inputShape);
+    `;
+    }
   
     // 根据sequenceId排序的层
     const sortedLayers = [...validModelStructure].sort((a, b) => {
@@ -70,13 +88,34 @@ export const generateModelCode = (modelStructure, edges) => {
     sortedLayers.forEach((layer, index) => {
       // 添加更多调试信息
       code += `    // Processing layer ${index}: ${layer.type}\n`;
+      
+      // 获取节点ID
+      const nodeId = layer.id || `${layer.type}-${index}`;
+      
+      // 获取形状信息
+      const shapeInfo = shapeMap[nodeId];
+      const inputShapeInfo = shapeInfo?.inputShape;
+      const outputShapeInfo = shapeInfo?.outputShape;
+      
+      if (shapeInfo?.error) {
+        code += `    // ⚠️ 警告: 此层存在形状问题: ${shapeInfo.error}\n`;
+      }
+      
+      // 记录输入输出形状
+      if (inputShapeInfo) {
+        code += `    // 输入形状: ${inputShapeInfo.description}\n`;
+      }
+      if (outputShapeInfo) {
+        code += `    // 预期输出形状: ${outputShapeInfo.description}\n`;
+      }
+      
       if (index === 0) {
         code += `    // This is the first layer and requires inputShape\n`;
       }
       
       switch (layer.type) {
         case 'conv2d':
-          code += generateConv2DCode(layer.config, index === 0);
+          code += generateConv2DCode(layer.config, index === 0, inputShapeInfo);
           break;
         case 'maxPooling2d':
           code += generateMaxPooling2DCode(layer.config);
@@ -85,12 +124,6 @@ export const generateModelCode = (modelStructure, edges) => {
           code += generateAvgPooling2DCode(layer.config);
           break;
         case 'dense':
-          // 检查是否需要添加Flatten层
-          const prevLayer = sortedLayers[index - 1];
-          if (prevLayer && (prevLayer.type === 'conv2d' || prevLayer.type === 'maxPooling2d' || prevLayer.type === 'avgPooling2d')) {
-            code += `  // Add Flatten layer\n`;
-            code += `  model.add(tf.layers.flatten());\n\n`;
-          }
           code += generateDenseCode(layer.config);
           break;
         case 'dropout':
@@ -103,16 +136,16 @@ export const generateModelCode = (modelStructure, edges) => {
           code += generateFlattenCode();
           break;
         case 'lstm':
-          code += generateLSTMCode(layer.config, index === 0);
+          code += generateLSTMCode(layer.config, index === 0, inputShapeInfo);
           break;
         case 'gru':
-          code += generateGRUCode(layer.config, index === 0);
+          code += generateGRUCode(layer.config, index === 0, inputShapeInfo);
           break;
         case 'activation':
           code += generateActivationCode(layer.config);
           break;
         case 'reshape':
-          code += generateReshapeCode(layer.config, index === 0);
+          code += generateReshapeCode(layer.config, index === 0, inputShapeInfo);
           break;
         default:
           throw new Error(`Unknown layer type: ${layer.type}`);
@@ -231,23 +264,120 @@ export const generateModelCode = (modelStructure, edges) => {
   // Training function
   const trainModel = async (model, data) => {
     try {
+      if (!model) {
+        throw new Error('模型为空');
+      }
+      
+      if (!data || !data.xs || !data.labels) {
+        throw new Error('训练数据为空或格式不正确');
+      }
+      
+      // 检查输入数据形状与模型输入层是否兼容
+      const modelInputShape = model.inputs[0].shape;
+      const dataShape = data.xs.shape;
+      
+      console.log('Model input shape:', modelInputShape);
+      console.log('Training data shape:', dataShape);
+      
+      // 检查维度是否匹配
+      if (modelInputShape.length !== dataShape.length) {
+        console.warn(\`输入维度不匹配: 模型期望 \${modelInputShape.length}D 输入, 但数据是 \${dataShape.length}D\`);
+        
+        // 尝试重塑数据以匹配模型输入
+        let reshapedXs;
+        try {
+          // 计算新的形状数组
+          const newShape = [...modelInputShape];
+          // 替换所有为null或者-1的维度
+          let totalElements = data.xs.size;
+          let negativeOneIndex = -1;
+          let knownElementsProduct = 1;
+          
+          for (let i = 0; i < newShape.length; i++) {
+            if (newShape[i] === null || newShape[i] === -1) {
+              if (negativeOneIndex === -1) {
+                negativeOneIndex = i;
+              } else {
+                // 如果存在多个未知维度，使用1替代第一个之外的维度
+                newShape[i] = 1;
+              }
+            } else {
+              knownElementsProduct *= newShape[i];
+            }
+          }
+          
+          // 计算未知维度的大小
+          if (negativeOneIndex !== -1) {
+            newShape[negativeOneIndex] = totalElements / knownElementsProduct;
+          }
+          
+          console.log('Attempting to reshape input data to:', newShape);
+          reshapedXs = data.xs.reshape(newShape);
+          console.log('Successfully reshaped data to match model input');
+          
+          // 使用重塑后的数据
+          data = {
+            xs: reshapedXs,
+            labels: data.labels
+          };
+        } catch (reshapeError) {
+          console.error('Error reshaping data:', reshapeError);
+          alert(\`无法重塑训练数据以匹配模型输入形状。请检查数据和模型结构。
+          模型输入形状: \${JSON.stringify(modelInputShape)}
+          数据形状: \${JSON.stringify(dataShape)}
+          错误: \${reshapeError.message}\`);
+          throw reshapeError;
+        }
+      }
+      
+      // 设置可视化指标
       const metrics = ['loss', 'val_loss', 'acc', 'val_acc'];
       const container = {
         name: 'Model Training', tab: 'Model', styles: { height: '1000px' }
       };
       const fitCallbacks = tfvis.show.fitCallbacks(container, metrics);
       
+      // 添加提前停止回调
+      const earlyStopping = tf.callbacks.earlyStopping({
+        monitor: 'val_loss',
+        minDelta: 0.001,
+        patience: 3,
+        verbose: 1
+      });
+      
+      // 添加进度反馈
+      const onBatchEnd = (batch, logs) => {
+        console.log('Batch:', batch, 'Loss:', logs.loss.toFixed(4));
+      };
+      
+      const onEpochEnd = (epoch, logs) => {
+        console.log('Epoch:', epoch, 
+          'Loss:', logs.loss.toFixed(4), 
+          'Acc:', logs.acc.toFixed(4),
+          'Val Loss:', logs.val_loss?.toFixed(4) || 'N/A', 
+          'Val Acc:', logs.val_acc?.toFixed(4) || 'N/A'
+        );
+      };
+      
+      // 开始训练
+      console.log('Starting model training...');
       const history = await model.fit(data.xs, data.labels, {
         batchSize: 32,
         validationSplit: 0.1,
         epochs: 10,
         shuffle: true,
-        callbacks: fitCallbacks
+        callbacks: [
+          fitCallbacks, 
+          earlyStopping,
+          { onBatchEnd, onEpochEnd }
+        ]
       });
-  
+      
+      console.log('Training completed successfully');
       return history;
     } catch (error) {
       console.error('Error during model training:', error);
+      alert(\`训练过程中发生错误: \${error.message}\`);
       throw error;
     }
   };
@@ -478,12 +608,21 @@ export const generateModelCode = (modelStructure, edges) => {
   };
   
   // 生成Conv2D层代码
-  const generateConv2DCode = (config, isFirstLayer) => {
+  const generateConv2DCode = (config, isFirstLayer, inputShape) => {
     const { kernelSize = 5, filters = 8, strides = 1, activation = 'relu', kernelInitializer = 'varianceScaling' } = config || {};
     
     let code = `  // Add Conv2D layer\n`;
     if (isFirstLayer) {
-      code += `  model.add(tf.layers.conv2d({\n    inputShape: [28, 28, 1],\n`;
+      // 使用从形状计算中获取的实际输入形状
+      let inputShapeStr = '[28, 28, 1]'; // 默认MNIST形状
+      
+      if (inputShape && inputShape.shape) {
+        // 移除批量维度（如果存在）
+        const actualShape = inputShape.dimensions === 4 ? inputShape.shape.slice(1) : inputShape.shape;
+        inputShapeStr = JSON.stringify(actualShape);
+      }
+      
+      code += `  model.add(tf.layers.conv2d({\n    inputShape: ${inputShapeStr},\n`;
     } else {
       code += `  model.add(tf.layers.conv2d({\n`;
     }
@@ -570,7 +709,7 @@ export const generateModelCode = (modelStructure, edges) => {
   };
   
   // 生成LSTM层代码
-  const generateLSTMCode = (config, isFirstLayer) => {
+  const generateLSTMCode = (config, isFirstLayer, inputShape) => {
     const { 
       units = 128, 
       activation = 'tanh', 
@@ -585,10 +724,16 @@ export const generateModelCode = (modelStructure, edges) => {
       // 为第一层添加inputShape
       code += `  model.add(tf.layers.lstm({\n`;
       
-      // 使用更通用的输入形状设置，更适用于 CSV 数据
-      // 假设输入是 [样本数, 时间步数, 特征维度]
-      // 这里我们设置为 [null, 特征维度]，允许任意长度的序列
-      code += `    inputShape: [null, inputFeatures],\n`; // 使用动态特征数量
+      // 使用从形状计算中获取的实际输入形状
+      let timeSteps = 'null';
+      let features = 'inputFeatures';
+      
+      if (inputShape && inputShape.shape && inputShape.shape.length >= 3) {
+        if (inputShape.shape[1] !== null) timeSteps = inputShape.shape[1];
+        if (inputShape.shape[2] !== null) features = inputShape.shape[2];
+      }
+      
+      code += `    inputShape: [${timeSteps}, ${features}],\n`;
     } else {
       code += `  model.add(tf.layers.lstm({\n`;
     }
@@ -613,7 +758,7 @@ export const generateModelCode = (modelStructure, edges) => {
   };
   
   // 生成GRU层代码
-  const generateGRUCode = (config, isFirstLayer) => {
+  const generateGRUCode = (config, isFirstLayer, inputShape) => {
     const { 
       units = 128, 
       activation = 'tanh', 
@@ -628,8 +773,16 @@ export const generateModelCode = (modelStructure, edges) => {
       // 为第一层添加inputShape
       code += `  model.add(tf.layers.gru({\n`;
       
-      // 使用更通用的输入形状设置，更适用于 CSV 数据
-      code += `    inputShape: [null, inputFeatures],\n`; // 使用动态特征数量
+      // 使用从形状计算中获取的实际输入形状
+      let timeSteps = 'null';
+      let features = 'inputFeatures';
+      
+      if (inputShape && inputShape.shape && inputShape.shape.length >= 3) {
+        if (inputShape.shape[1] !== null) timeSteps = inputShape.shape[1];
+        if (inputShape.shape[2] !== null) features = inputShape.shape[2];
+      }
+      
+      code += `    inputShape: [${timeSteps}, ${features}],\n`;
     } else {
       code += `  model.add(tf.layers.gru({\n`;
     }
@@ -666,7 +819,7 @@ export const generateModelCode = (modelStructure, edges) => {
   };
   
   // 生成Reshape层代码
-  const generateReshapeCode = (config, isFirstLayer) => {
+  const generateReshapeCode = (config, isFirstLayer, inputShape) => {
     const { targetShape = '(None, 7, 4)', inputFeatures = 4 } = config || {};
     
     console.log('Reshape config:', config);
@@ -700,18 +853,17 @@ export const generateModelCode = (modelStructure, edges) => {
       code += `  // Reshape as first layer - ensure inputShape is at least 2D for Flatten compatibility\n`;
       code += `  model.add(tf.layers.reshape({\n`;
       
-      // 确保输入形状正确
-      // 对于CSV数据，我们确保输入是二维的，至少包含一个时间步维度
-      code += `    // 为避免维度错误, 确保输入形状是合适的\n`;
+      // 使用从形状计算中获取的实际输入形状
+      let inputShapeStr = '[inputFeatures]';
       
-      // 根据不同情况设置不同的输入形状
-      code += `    // 检查数据源是CSV还是图像数据\n`;
-      code += `    inputShape: Array.isArray(inputFeatures) ? inputFeatures : [inputFeatures],\n`;
+      if (inputShape && inputShape.shape) {
+        inputShapeStr = JSON.stringify(inputShape.shape);
+      }
+      
+      code += `    inputShape: ${inputShapeStr},\n`;
       
       // 确保 targetShape 是适当的格式
       code += `    targetShape: [${parsedShape.join(', ')}],\n`;
-      code += `    // 添加错误处理以防止维度不兼容\n`;
-      code += `    // 如果需要从1D到更高维度，请确保原始数据大小兼容\n`;
     } else {
       // 不是第一层
       code += `  console.log('Adding Reshape layer (not first)');\n`;
