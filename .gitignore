@@ -22,3 +22,17 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# 忽略虚拟环境目录
+.venv/
+
+# 忽略 Python 编译文件
+__pycache__/
+*.pyc
+
+# 忽略 IDE 配置文件
+.vscode/
+.idea/
+
+# 忽略操作系统临时文件
+.DS_Store
+Thumbs.db
