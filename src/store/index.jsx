@@ -460,6 +460,10 @@ const useStore = create((set) => ({
 
   useMnist: false,
   setUseMnist: (value) => set(() => ({ useMnist: value })),
+
+  // 项目相关的状态
+  currentProject: null,
+  setCurrentProject: (project) => set({ currentProject: project }),
 }));
 
 // 将store实例放到window对象上以便全局访问

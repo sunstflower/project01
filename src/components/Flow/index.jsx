@@ -16,6 +16,9 @@ import { useDrop } from 'react-dnd';
 import { generateModelCode, validateModelStructure, generateModelStructureFromGraph, generateLayerTooltip } from '@/tfjs/modelGenerator';
 import { validateConnection, calculateModelShapes, getLayerShapeDescription, getLayerDescription } from '@/utils/layerValidation';
 import LayerTooltip from '../Tooltip/LayerTooltip';
+import projectService from '../../services/projectService';
+import Header from '../Header';
+import { useParams, useNavigate } from 'react-router-dom';
 
 import UseData from '../UseData';
 import MnistData from '../modelAdd/mnist';
@@ -110,6 +113,15 @@ function FlowWithProvider() {
 }
 
 function FlowComponent() {
+  // 获取URL参数中的项目ID
+  const { projectId } = useParams();
+  const navigate = useNavigate();
+  
+  // 添加跟踪渲染和节点/边数量变化的ref
+  const isFirstRender = useRef(true);
+  const prevElementsLength = useRef(0);
+  const prevEdgesLength = useRef(0);
+  
   const { 
     nodes, 
     addNode, 
@@ -127,6 +139,8 @@ function FlowComponent() {
     batchNormConfigs,
     flattenConfigs,
     updateDenseConfig,
+    currentProject,
+    setCurrentProject,
   } = useStore();
   
   const [elements, setElements] = useState([]);
@@ -143,6 +157,61 @@ function FlowComponent() {
   const [tooltipInfo, setTooltipInfo] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [showTooltip, setShowTooltip] = useState(false);
+  
+  // 从URL加载项目
+  useEffect(() => {
+    const loadProjectFromUrl = async () => {
+      if (projectId) {
+        try {
+          // 获取项目详情
+          const project = projectService.getProject(projectId);
+          if (!project) {
+            console.error('项目不存在：', projectId);
+            navigate('/flow');
+            return;
+          }
+          
+          // 设置当前项目
+          setCurrentProject(project);
+          
+          // 解析和加载项目数据
+          if (project.flowData) {
+            try {
+              const flowData = JSON.parse(project.flowData);
+              setElements(flowData);
+            } catch (e) {
+              console.error('解析流程图数据失败:', e);
+            }
+          }
+          
+          if (project.edgesData) {
+            try {
+              const edgesData = JSON.parse(project.edgesData);
+              setEdges(edgesData);
+            } catch (e) {
+              console.error('解析连接数据失败:', e);
+            }
+          }
+          
+          if (project.configData) {
+            try {
+              const configData = JSON.parse(project.configData);
+              // 在这里可以加载配置数据到相应的状态
+              console.log('加载项目配置:', configData);
+            } catch (e) {
+              console.error('解析配置数据失败:', e);
+            }
+          }
+          
+        } catch (error) {
+          console.error('加载项目失败:', error);
+        }
+      }
+    };
+    
+    loadProjectFromUrl();
+    // 只在projectId变化时执行，避免其他依赖变化引起的重复加载
+  }, [projectId, navigate]);
   
   // 处理节点之间的连接
   const onConnect = useCallback((params) => {
@@ -264,29 +333,52 @@ function FlowComponent() {
       nodesWithoutOutEdges.some(n => n.id === node.id)
     );
     
+    // 防止无限循环：检查是否有需要标记的节点且该节点的配置确实需要更新
     if (outputDenseNodes.length > 0) {
       // 对每个找到的输出层Dense节点设置isOutput标志
       outputDenseNodes.forEach(outputNode => {
         const index = outputNode.data?.index || 0;
-        // 确保这个节点的Dense配置有正确的单位数（通常为输出类别数量）
-        // 对于分类任务，通常是10（数字识别）或根据任务需要设置
-        if (!denseConfigs[index] || !denseConfigs[index].units) {
-          updateDenseConfig(index, { 
+        
+        // 检查当前配置，只有当配置不存在或需要更新时才更新
+        const currentConfig = denseConfigs[index] || {};
+        const needsUpdate = !currentConfig.isOutput || 
+                           currentConfig.units !== 10 || 
+                           currentConfig.activation !== 'softmax';
+        
+        if (needsUpdate) {
+          console.log(`标记Dense节点 ${outputNode.id} 为输出层，并设置默认单位为10`);
+          updateDenseConfig(index, {
             units: 10,
             activation: 'softmax',
             kernelInitializer: 'varianceScaling',
             isOutput: true
           });
-          console.log(`标记Dense节点 ${outputNode.id} 为输出层，并设置默认单位为10`);
         }
       });
     }
   }, [elements, edges, denseConfigs, updateDenseConfig]);
 
-  // 在元素变化后标记输出层
+  // 在元素变化后标记输出层，但避免无限循环
   useEffect(() => {
-    markOutputLayer();
-  }, [markOutputLayer, elements.length, edges.length]);
+    // 只有当真正添加或删除了节点/连接时才执行标记操作
+    // 使用已经在组件顶层定义的ref
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      prevElementsLength.current = elements.length;
+      prevEdgesLength.current = edges.length;
+      // 首次渲染时执行一次
+      markOutputLayer();
+      return;
+    }
+    
+    // 只有当节点或边的数量发生变化时才执行
+    if (elements.length !== prevElementsLength.current || 
+        edges.length !== prevEdgesLength.current) {
+      prevElementsLength.current = elements.length;
+      prevEdgesLength.current = edges.length;
+      markOutputLayer();
+    }
+  }, [elements.length, edges.length, markOutputLayer]);
 
   // 获取节点配置的辅助函数
   const getNodeConfig = useCallback((node) => {
@@ -331,6 +423,10 @@ function FlowComponent() {
   // 尝试将新节点自动连接到最后一个合适的节点
   const tryConnectToLastNode = (newNode, elements) => {
     if (elements.length === 0) return [];
+    
+    // 检查节点是否已经有连接
+    const hasConnection = edges.some(edge => edge.target === newNode.id);
+    if (hasConnection) return [];
     
     // 按照添加顺序获取节点
     const orderedNodes = [...elements].sort((a, b) => {
@@ -528,10 +624,18 @@ function FlowComponent() {
 
   // 添加节点的处理函数
   const handleAddNode = useCallback((type, position) => {
-    let newNode = {};
-    let nodeId = '';
-    let configIndex = 0;
+    // 检查是否已经存在相同时间戳的节点，防止重复添加
     const currentTimestamp = Date.now();
+    const nodeId = `${type}-${currentTimestamp}`;
+    
+    // 检查节点是否已存在
+    if (elements.some(node => node.id === nodeId)) {
+      console.log(`节点${nodeId}已存在，跳过添加`);
+      return;
+    }
+    
+    let newNode = {};
+    let configIndex = 0;
     
     // 获取当前节点数量作为序列ID
     const sequenceId = elements.length;
@@ -539,7 +643,6 @@ function FlowComponent() {
     // 根据节点类型创建不同的节点
     if (type === 'conv2d') {
       configIndex = conv2dConfigs.length;
-      nodeId = `conv2d-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'conv2d',
@@ -551,7 +654,6 @@ function FlowComponent() {
       };
     } else if (type === 'maxPooling2d') {
       configIndex = maxPooling2dConfigs.length;
-      nodeId = `maxPooling2d-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'maxPooling2d',
@@ -563,7 +665,6 @@ function FlowComponent() {
       };
     } else if (type === 'dense') {
       configIndex = denseConfigs.length;
-      nodeId = `dense-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'dense',
@@ -574,7 +675,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'trainButton') {
-      nodeId = `trainButton-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'trainButton',
@@ -584,7 +684,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'useData') {
-      nodeId = `useData-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'useData',
@@ -594,7 +693,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'mnist') {
-      nodeId = `mnist-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'mnist',
@@ -604,7 +702,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'dropout') {
-      nodeId = `dropout-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'dropout',
@@ -614,7 +711,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'batchNorm') {
-      nodeId = `batchNorm-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'batchNorm',
@@ -624,7 +720,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'flatten') {
-      nodeId = `flatten-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'flatten',
@@ -634,7 +729,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'lstm') {
-      nodeId = `lstm-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'lstm',
@@ -644,7 +738,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'activation') {
-      nodeId = `activation-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'activation',
@@ -655,7 +748,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'avgPooling2d') {
-      nodeId = `avgPooling2d-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'avgPooling2d',
@@ -666,7 +758,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'gru') {
-      nodeId = `gru-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'gru',
@@ -677,7 +768,6 @@ function FlowComponent() {
         position,
       };
     } else if (type === 'reshape') {
-      nodeId = `reshape-${currentTimestamp}`;
       newNode = {
         id: nodeId,
         type: 'reshape',
@@ -837,135 +927,253 @@ function FlowComponent() {
     setShowTooltip(true);
   }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs, reshapeConfigs]);
 
+  // 添加项目保存功能
+  const saveCurrentProject = async (getStateOnly = false) => {
+    try {
+      // 记录保存前的项目状态
+      console.log('保存项目前 - 当前项目状态:', currentProject);
+      console.log('仅获取状态模式:', getStateOnly);
+      
+      // 收集当前的流程图和配置数据
+      const flowData = elements;
+      const edgesData = edges;
+      
+      // 收集所有配置
+      const configData = {
+        conv2dConfigs,
+        maxPooling2dConfigs,
+        denseConfigs,
+        reshapeConfigs,
+        lstmConfigs,
+        gruConfigs,
+        activationConfigs,
+        avgPooling2dConfigs,
+        dropoutConfigs,
+        batchNormConfigs,
+        flattenConfigs,
+      };
+      
+      // 如果只需要获取当前状态，不实际保存
+      if (getStateOnly) {
+        console.log('只返回项目状态，不保存');
+        return {
+          flowData: JSON.stringify(flowData),
+          edgesData: JSON.stringify(edgesData),
+          configData: JSON.stringify(configData),
+          tempName: currentProject?.name || '未命名项目',
+          description: currentProject?.description || ''
+        };
+      }
+      
+      let resultProject = null;
+      
+      if (!currentProject || !currentProject.id) {
+        // 如果没有当前项目或是新项目，创建一个新项目
+        const name = prompt('请输入项目名称:', '未命名项目');
+        if (!name) return null; // 用户取消
+        
+        const description = prompt('请输入项目描述 (可选):', '');
+        
+        const newProject = await projectService.createProject({
+          name,
+          description,
+          flowData: JSON.stringify(flowData),
+          edgesData: JSON.stringify(edgesData),
+          configData: JSON.stringify(configData),
+        });
+        
+        console.log('创建的新项目:', newProject);
+        
+        // 确保新项目有ID
+        if (!newProject || !newProject.id) {
+          console.error('创建的项目没有ID:', newProject);
+          throw new Error('创建项目失败：无法生成项目ID');
+        }
+        
+        setCurrentProject(newProject);
+        resultProject = newProject;
+      } else {
+        // 更新现有项目
+        const updatedProject = await projectService.updateProject(
+          currentProject.id,
+          {
+            flowData: JSON.stringify(flowData),
+            edgesData: JSON.stringify(edgesData),
+            configData: JSON.stringify(configData),
+          }
+        );
+        
+        console.log('更新后的项目:', updatedProject);
+        
+        // 确保更新后的项目有ID
+        if (!updatedProject || !updatedProject.id) {
+          console.error('更新后的项目没有ID:', updatedProject);
+          throw new Error('更新项目失败：项目ID丢失');
+        }
+        
+        setCurrentProject(updatedProject);
+        resultProject = updatedProject;
+      }
+      
+      // 验证项目是否正确保存并有ID
+      console.log('保存后的项目:', resultProject);
+      console.log('保存后的项目ID:', resultProject?.id);
+      
+      // 同步更新到localStorage以确保一致性
+      if (resultProject && resultProject.id) {
+        const allProjects = projectService.getUserProjects();
+        console.log('所有项目:', allProjects);
+        
+        // 确认项目在localStorage中
+        const savedProject = projectService.getProject(resultProject.id);
+        console.log('从localStorage读取的项目:', savedProject);
+        
+        if (!savedProject) {
+          console.error('项目已保存但未能从localStorage读取');
+        }
+      }
+      
+      return resultProject;
+    } catch (error) {
+      console.error('保存项目失败:', error);
+      alert(`保存失败: ${error.message}`);
+      throw error;
+    }
+  };
+
   return (
-    <div className="relative w-full h-[90vh] min-h-[700px]" ref={reactFlowWrapper}>
-      <ReactFlow
-        ref={drop}
-        nodes={elements}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodesDelete={onNodeDelete}
-        nodeTypes={nodeTypes}
-        defaultEdgeOptions={edgeOptions}
-        connectionLineStyle={connectionLineStyle}
-        snapToGrid={true}
-        snapGrid={[15, 15]}
-        onInit={setReactFlowInstance}
-        fitView
-        style={rfStyle}
-        deleteKeyCode="Delete"
-        onNodeMouseEnter={handleNodeHover}
-        onNodeMouseLeave={() => setShowTooltip(false)}
-        onPaneClick={() => setShowTooltip(false)}
-      >
-        <Background color="#d1d1d6" gap={16} variant="dots" />
-        <MiniMap 
-          nodeStrokeColor={(n) => {
-            if (n.type === 'useData' || n.type === 'mnist') return '#10b981';
-            if (n.type === 'conv2d') return '#3b82f6';
-            if (n.type === 'maxPooling2d') return '#6366f1';
-            if (n.type === 'dense') return '#f59e0b';
-            if (n.type === 'trainButton') return '#ef4444';
-            if (n.type === 'activation') return '#ec4899';
-            if (n.type === 'avgPooling2d') return '#6366f1';
-            if (n.type === 'gru') return '#8b5cf6';
-            if (n.type === 'reshape') return '#06b6d4';
-            return '#9ca3af';
-          }}
-          nodeColor={(n) => {
-            if (n.type === 'useData' || n.type === 'mnist') return '#a7f3d0';
-            if (n.type === 'conv2d') return '#93c5fd';
-            if (n.type === 'maxPooling2d') return '#c7d2fe';
-            if (n.type === 'dense') return '#fed7aa';
-            if (n.type === 'trainButton') return '#fca5a5';
-            if (n.type === 'activation') return '#fbcfe8';
-            if (n.type === 'avgPooling2d') return '#c7d2fe';
-            if (n.type === 'gru') return '#e9d5ff';
-            if (n.type === 'reshape') return '#a5f3fc';
-            return '#d1d5db';
-          }}
+    <div className="w-full h-screen flex flex-col">
+      <Header currentProject={currentProject} onSaveProject={saveCurrentProject} />
+      
+      <div className="relative w-full flex-1 min-h-[700px]" ref={reactFlowWrapper}>
+        <ReactFlow
+          ref={drop}
+          nodes={elements}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodesDelete={onNodeDelete}
+          nodeTypes={nodeTypes}
+          defaultEdgeOptions={edgeOptions}
+          connectionLineStyle={connectionLineStyle}
+          snapToGrid={true}
+          snapGrid={[15, 15]}
+          onInit={setReactFlowInstance}
+          fitView
+          style={rfStyle}
+          deleteKeyCode="Delete"
+          onNodeMouseEnter={handleNodeHover}
+          onNodeMouseLeave={() => setShowTooltip(false)}
+          onPaneClick={() => setShowTooltip(false)}
+        >
+          <Background color="#d1d1d6" gap={16} variant="dots" />
+          <MiniMap 
+            nodeStrokeColor={(n) => {
+              if (n.type === 'useData' || n.type === 'mnist') return '#10b981';
+              if (n.type === 'conv2d') return '#3b82f6';
+              if (n.type === 'maxPooling2d') return '#6366f1';
+              if (n.type === 'dense') return '#f59e0b';
+              if (n.type === 'trainButton') return '#ef4444';
+              if (n.type === 'activation') return '#ec4899';
+              if (n.type === 'avgPooling2d') return '#6366f1';
+              if (n.type === 'gru') return '#8b5cf6';
+              if (n.type === 'reshape') return '#06b6d4';
+              return '#9ca3af';
+            }}
+            nodeColor={(n) => {
+              if (n.type === 'useData' || n.type === 'mnist') return '#a7f3d0';
+              if (n.type === 'conv2d') return '#93c5fd';
+              if (n.type === 'maxPooling2d') return '#c7d2fe';
+              if (n.type === 'dense') return '#fed7aa';
+              if (n.type === 'trainButton') return '#fca5a5';
+              if (n.type === 'activation') return '#fbcfe8';
+              if (n.type === 'avgPooling2d') return '#c7d2fe';
+              if (n.type === 'gru') return '#e9d5ff';
+              if (n.type === 'reshape') return '#a5f3fc';
+              return '#d1d5db';
+            }}
+          />
+          <Controls />
+          <Panel position="top-right">
+            <div className="bg-white p-3 rounded-xl shadow-md">
+              <h3 className="text-sm font-medium text-gray-800">Drag & Drop Components</h3>
+            </div>
+          </Panel>
+          <Panel position="bottom-center">
+            <div className="flex space-x-4">
+              <button 
+                onClick={generateCode}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5"
+              >
+                Generate TensorFlow.js Code
+              </button>
+              <button 
+                onClick={openTensorboard}
+                disabled={tensorboardStatus === 'loading'}
+                className={`${
+                  tensorboardStatus === 'loading' 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-green-500 hover:bg-green-600'
+                } text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5`}
+              >
+                {tensorboardStatus === 'loading' 
+                  ? '准备中...' 
+                  : tensorboardStatus === 'ready' 
+                    ? '在TensorBoard中查看' 
+                    : '查看TensorBoard'}
+              </button>
+            </div>
+          </Panel>
+        </ReactFlow>
+        
+        {/* 代码生成弹窗 */}
+        {isModalVisible && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+              <div className="flex justify-between items-center px-6 py-4 border-b">
+                <h3 className="text-lg font-medium text-gray-800">Generated TensorFlow.js Model Code</h3>
+                <button 
+                  onClick={() => setIsModalVisible(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-auto p-6">
+                <pre className="bg-gray-50 p-4 rounded-lg overflow-auto font-mono text-sm whitespace-pre-wrap">
+                  {generatedCode}
+                </pre>
+              </div>
+              
+              <div className="px-6 py-4 border-t flex justify-end gap-3">
+                <button 
+                  onClick={copyCodeToClipboard}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out"
+                >
+                  Copy Code
+                </button>
+                <button 
+                  onClick={() => setIsModalVisible(false)}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* 层信息悬浮提示 */}
+        <LayerTooltip 
+          layerInfo={tooltipInfo}
+          visible={showTooltip}
+          position={tooltipPosition}
         />
-        <Controls />
-        <Panel position="top-right">
-          <div className="bg-white p-3 rounded-xl shadow-md">
-            <h3 className="text-sm font-medium text-gray-800">Drag & Drop Components</h3>
-          </div>
-        </Panel>
-        <Panel position="bottom-center">
-          <div className="flex space-x-4">
-            <button 
-              onClick={generateCode}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5"
-            >
-              Generate TensorFlow.js Code
-            </button>
-            <button 
-              onClick={openTensorboard}
-              disabled={tensorboardStatus === 'loading'}
-              className={`${
-                tensorboardStatus === 'loading' 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-green-500 hover:bg-green-600'
-              } text-white font-medium py-2 px-6 rounded-xl shadow-md transition duration-150 ease-in-out mb-5`}
-            >
-              {tensorboardStatus === 'loading' 
-                ? '准备中...' 
-                : tensorboardStatus === 'ready' 
-                  ? '在TensorBoard中查看' 
-                  : '查看TensorBoard'}
-            </button>
-          </div>
-        </Panel>
-      </ReactFlow>
-      
-      {/* 代码生成弹窗 */}
-      {isModalVisible && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center px-6 py-4 border-b">
-              <h3 className="text-lg font-medium text-gray-800">Generated TensorFlow.js Model Code</h3>
-              <button 
-                onClick={() => setIsModalVisible(false)}
-                className="text-gray-400 hover:text-gray-500"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-auto p-6">
-              <pre className="bg-gray-50 p-4 rounded-lg overflow-auto font-mono text-sm whitespace-pre-wrap">
-                {generatedCode}
-              </pre>
-            </div>
-            
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
-              <button 
-                onClick={copyCodeToClipboard}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out"
-              >
-                Copy Code
-              </button>
-              <button 
-                onClick={() => setIsModalVisible(false)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* 层信息悬浮提示 */}
-      <LayerTooltip 
-        layerInfo={tooltipInfo}
-        visible={showTooltip}
-        position={tooltipPosition}
-      />
+      </div>
     </div>
   );
 }

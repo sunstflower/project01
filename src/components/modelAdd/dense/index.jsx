@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import NodeContainer from '../NodeContainer';
 import useStore from '@/store'; 
 
@@ -11,26 +11,35 @@ function DenseNode({ data }) {
     // 使用传入的index获取对应的配置
     const configIndex = data.index || 0;
     
+    // 添加一个ref来跟踪是否已经初始化配置
+    const isInitialized = useRef(false);
+    
     // 确保配置存在
     useEffect(() => {
-        // 检查当前配置是否存在且units已设置
-        if (!denseConfigs[configIndex] || !denseConfigs[configIndex].units) {
-            // 根据是否为最后一个Dense层设置不同的默认值
-            const isOutputLayer = data.isOutput || false;
-            const defaultUnits = isOutputLayer ? 10 : 128;
-            const defaultActivation = isOutputLayer ? 'softmax' : 'relu';
-            
-            updateDenseConfig(configIndex, { 
-                units: defaultUnits,
-                activation: defaultActivation,
-                kernelInitializer: 'varianceScaling'
-            });
-            
-            console.log(`Dense层 ${configIndex} 设置默认值:`, { 
-                units: defaultUnits, 
-                activation: defaultActivation 
-            });
+        // 如果已经初始化过，或者配置已存在且设置了units，则跳过
+        if (isInitialized.current || (denseConfigs[configIndex] && denseConfigs[configIndex].units)) {
+            isInitialized.current = true;
+            return;
         }
+        
+        // 标记为已初始化
+        isInitialized.current = true;
+        
+        // 根据是否为最后一个Dense层设置不同的默认值
+        const isOutputLayer = data.isOutput || false;
+        const defaultUnits = isOutputLayer ? 10 : 128;
+        const defaultActivation = isOutputLayer ? 'softmax' : 'relu';
+        
+        updateDenseConfig(configIndex, { 
+            units: defaultUnits,
+            activation: defaultActivation,
+            kernelInitializer: 'varianceScaling'
+        });
+        
+        console.log(`Dense层 ${configIndex} 设置默认值:`, { 
+            units: defaultUnits, 
+            activation: defaultActivation 
+        });
     }, [configIndex, denseConfigs, updateDenseConfig, data.isOutput]);
     
     // 现在安全地获取配置

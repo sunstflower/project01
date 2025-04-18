@@ -1,330 +1,427 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import useStore from '@/store';
 import Papa from 'papaparse';
 import { createTensorsFromCSV } from '@/tfjs/data';
+import styles from './UseData.module.css';
 
-function UseData() {
-    const { changeData, isData } = useStore();
-    const [selectedOption, setSelectedOption] = useState('handwriting');
+function UseData({ id, data }) {
+    const { setNodeData } = useStore();
+    const [selectedOption, setSelectedOption] = useState('mnist');
     const [csvFile, setCsvFile] = useState(null);
     const [csvSummary, setCsvSummary] = useState(null);
-    const [processingStatus, setProcessingStatus] = useState('');
-    const [numericColumns, setNumericColumns] = useState([]);
-    const [totalColumns, setTotalColumns] = useState(0);
+    const [processingStatus, setProcessingStatus] = useState(null);
     
-    // 新增：数据处理选项
-    const [dataOptions, setDataOptions] = useState({
-        targetColumn: '',
-        isTimeSeries: false, 
-        timeSteps: 1,
-        outputShape: '3d'  // 3d输出更适合大多数网络
-    });
+    // Advanced data options
+    const [targetColumn, setTargetColumn] = useState('');
+    const [isTimeSeries, setIsTimeSeries] = useState(false);
+    const [timeSteps, setTimeSteps] = useState(1);
+    const [predictSteps, setPredictSteps] = useState(1);
+    const [outputShape, setOutputShape] = useState('2d');
+    const [splitRatio, setSplitRatio] = useState(0.8);
+    const [normalizeData, setNormalizeData] = useState(true);
+    
+    // Column type states
+    const [numericColumns, setNumericColumns] = useState([]);
+    const [categoricalColumns, setCategoricalColumns] = useState([]);
 
-    const handleSelectChange = (event) => {
-        setSelectedOption(event.target.value);
-        if (event.target.value !== 'csv') {
+    // Handle data option change
+    const handleSelectChange = useCallback((e) => {
+        setSelectedOption(e.target.value);
+        if (e.target.value === 'mnist') {
+            setNodeData(id, { dataType: 'mnist' });
+        } else {
+            // Reset CSV data when switching to CSV option
             setCsvFile(null);
             setCsvSummary(null);
-            setNumericColumns([]);
+            setProcessingStatus(null);
+            setTargetColumn('');
         }
-    };
+    }, [id, setNodeData]);
 
-    const handleFileUpload = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            setCsvFile(file);
-            setProcessingStatus('正在分析CSV文件...');
-            parseCsv(file);
-        }
-    };
-
-    // 检查一个值是否为数值
-    const isNumeric = (value) => {
-        return !isNaN(parseFloat(value)) && isFinite(value);
-    };
-
-    // 检查列是否为数值类型
-    const checkColumnType = (data, columnName) => {
-        if (!data || data.length === 0) return false;
+    // Handle file upload
+    const handleFileUpload = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file) return;
         
-        // 检查前10行或所有行（如果少于10行）
-        const rowsToCheck = Math.min(data.length, 10);
-        let numericCount = 0;
+        setCsvFile(file);
+        setProcessingStatus('Parsing CSV file...');
         
-        for (let i = 0; i < rowsToCheck; i++) {
-            if (isNumeric(data[i][columnName])) {
-                numericCount++;
-            }
-        }
-        
-        // 如果超过80%的值是数值，则认为是数值列
-        return (numericCount / rowsToCheck) > 0.8;
-    };
-
-    // 处理CSV数据预处理
-    const preprocessCsvData = (data) => {
-        if (!data || data.length === 0) {
-            setProcessingStatus('CSV数据为空');
-            return [];
-        }
-
-        // 识别所有列
-        const columnNames = Object.keys(data[0]);
-        setTotalColumns(columnNames.length);
-        
-        // 识别数值列
-        const numericCols = columnNames.filter(col => checkColumnType(data, col));
-        setNumericColumns(numericCols);
-        
-        // 如果有数值列，默认设置第一个为目标列
-        if (numericCols.length > 0) {
-            setDataOptions(prev => ({
-                ...prev,
-                targetColumn: numericCols[0]
-            }));
-        }
-        
-        // 预处理数据 - 确保所有数值列都是数字类型
-        const processedData = data.map(row => {
-            const processedRow = {...row};
-            numericCols.forEach(col => {
-                processedRow[col] = parseFloat(row[col]) || 0;
-            });
-            return processedRow;
-        });
-
-        const summary = {
-            totalRows: data.length,
-            totalColumns: columnNames.length,
-            numericColumns: numericCols.length,
-            nonNumericColumns: columnNames.length - numericCols.length,
-            columnNames: columnNames,
-            numericColumnNames: numericCols,
-            sampleSize: Math.min(data.length, 5)
-        };
-        
-        setCsvSummary(summary);
-        setProcessingStatus(`CSV分析完成: ${numericCols.length}个数值列，可用于训练`);
-        
-        return processedData;
-    };
-
-    const parseCsv = (file) => {
         Papa.parse(file, {
             header: true,
-            dynamicTyping: true, // 自动转换数值
+            dynamicTyping: true,
+            skipEmptyLines: true,
             complete: (results) => {
-                console.log('Parsed CSV data:', results);
-                
                 if (results.errors && results.errors.length > 0) {
-                    console.error('CSV parsing errors:', results.errors);
-                    setProcessingStatus(`解析错误: ${results.errors[0].message}`);
+                    setProcessingStatus(`Error parsing CSV: ${results.errors[0].message}`);
                     return;
                 }
                 
-                const processedData = preprocessCsvData(results.data);
-                
-                // 只存储原始CSV数据，在确认时再处理为张量
-                changeData(processedData);
-            },
-            error: (error) => {
-                console.error('Error parsing CSV:', error);
-                setProcessingStatus(`解析错误: ${error.message}`);
-            }
-        });
-    };
-
-    // 处理数据选项变更
-    const handleOptionsChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setDataOptions(prev => ({
-            ...prev,
-            [name]: type === 'checkbox' ? checked : value
-        }));
-    };
-
-    const handleConfirm = () => {
-        try {
-            if (selectedOption === 'handwriting') {
-                // 处理MNIST数据集
-                changeData([]);
-                setProcessingStatus('已选择MNIST数据集');
-            } else if (selectedOption === 'csv' && csvFile) {
-                const processedData = useStore.getState().csvData;
-                
-                if (!processedData || processedData.length === 0) {
-                    setProcessingStatus('没有有效的CSV数据');
+                if (!results.data || results.data.length === 0) {
+                    setProcessingStatus('CSV file is empty or invalid');
                     return;
                 }
                 
-                // 使用增强的处理函数，创建张量并存储元数据
-                const options = {
-                    ...dataOptions,
-                    timeSteps: parseInt(dataOptions.timeSteps, 10)
+                // Analyze column types
+                const columns = results.meta.fields || Object.keys(results.data[0]);
+                const { numericCols, categoricalCols } = checkColumnTypes(results.data, columns);
+                
+                setNumericColumns(numericCols);
+                setCategoricalColumns(categoricalCols);
+                
+                // Set first numeric column as default target
+                if (numericCols.length > 0 && !targetColumn) {
+                    setTargetColumn(numericCols[0]);
+                }
+                
+                // Create summary
+                const summary = {
+                    rowCount: results.data.length,
+                    columnCount: columns.length,
+                    columns: columns,
+                    sampleRow: results.data[0],
+                    numericColumns: numericCols,
+                    categoricalColumns: categoricalCols
                 };
                 
-                console.log('Processing CSV data with options:', options);
+                setCsvSummary(summary);
+                setProcessingStatus('CSV file parsed successfully');
+            },
+            error: (error) => {
+                setProcessingStatus(`Error parsing CSV: ${error.message}`);
+            }
+        });
+    }, [targetColumn]);
+
+    // Check column types
+    const checkColumnTypes = useCallback((data, columns) => {
+        const numericCols = [];
+        const categoricalCols = [];
+        
+        // Check first 10 rows to determine column types
+        const sampleSize = Math.min(10, data.length);
+        
+        columns.forEach(col => {
+            let isNumeric = true;
+            
+            for (let i = 0; i < sampleSize; i++) {
+                const value = data[i][col];
+                if (value === null || value === undefined) continue;
                 
-                // 创建张量并保存
-                const tensorData = createTensorsFromCSV(processedData, options);
+                if (typeof value !== 'number' && isNaN(parseFloat(value))) {
+                    isNumeric = false;
+                    break;
+                }
+            }
+            
+            if (isNumeric) {
+                numericCols.push(col);
+            } else {
+                categoricalCols.push(col);
+            }
+        });
+        
+        return { numericCols, categoricalCols };
+    }, []);
+
+    // Process CSV data
+    const processCSVData = useCallback(() => {
+        if (!csvFile || !csvSummary) return null;
+        
+        try {
+            return new Promise((resolve, reject) => {
+                setProcessingStatus('Processing CSV data...');
                 
-                if (tensorData.error) {
-                    throw new Error(tensorData.error.message);
+                Papa.parse(csvFile, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        if (results.errors && results.errors.length > 0) {
+                            reject(new Error(`CSV parsing error: ${results.errors[0].message}`));
+                            return;
+                        }
+                        
+                        const data = results.data;
+                        
+                        // Validate target column
+                        if (!targetColumn) {
+                            reject(new Error('Please select a target column'));
+                            return;
+                        }
+                        
+                        // Validate time series settings
+                        if (isTimeSeries && (timeSteps < 1 || predictSteps < 1)) {
+                            reject(new Error('Time steps and predict steps must be at least 1'));
+                            return;
+                        }
+                        
+                        if (isTimeSeries && data.length < timeSteps + predictSteps) {
+                            reject(new Error(`Time series data must have at least ${timeSteps + predictSteps} rows`));
+                            return;
+                        }
+                        
+                        setProcessingStatus('Creating tensors from data...');
+                        
+                        // Create tensors
+                        const options = {
+                            targetColumn,
+                            isTimeSeries,
+                            timeSteps: parseInt(timeSteps, 10),
+                            predictSteps: parseInt(predictSteps, 10),
+                            outputShape,
+                            splitRatio: parseFloat(splitRatio),
+                            normalize: normalizeData
+                        };
+                        
+                        try {
+                            const tensorData = createTensorsFromCSV(data, options);
+                            
+                            if (!tensorData.xs || !tensorData.labels) {
+                                reject(new Error('Failed to create tensors from CSV data'));
+                                return;
+                            }
+                            
+                            resolve(tensorData);
+                        } catch (err) {
+                            reject(new Error(`Tensor creation error: ${err.message}`));
+                        }
+                    },
+                    error: (error) => {
+                        reject(new Error(`CSV parsing error: ${error.message}`));
+                    }
+                });
+            });
+        } catch (error) {
+            setProcessingStatus(`Error: ${error.message}`);
+            return null;
+        }
+    }, [csvFile, csvSummary, targetColumn, isTimeSeries, timeSteps, predictSteps, outputShape, splitRatio, normalizeData]);
+
+    // Confirm data usage
+    const confirmData = useCallback(async () => {
+        try {
+            if (selectedOption === 'mnist') {
+                setNodeData(id, { dataType: 'mnist' });
+                setProcessingStatus('MNIST data selected');
+            } else if (selectedOption === 'csv') {
+                if (!csvFile) {
+                    setProcessingStatus('Error: Please upload a CSV file');
+                    return;
                 }
                 
-                if (!tensorData.xs || !tensorData.labels) {
-                    throw new Error('无法创建有效的张量数据');
+                setProcessingStatus('Processing CSV data...');
+                const tensorData = await processCSVData();
+                
+                if (!tensorData) {
+                    setProcessingStatus('Error: Failed to process CSV data');
+                    return;
                 }
                 
-                console.log('Created tensor data:', tensorData);
+                // Extract metadata from tensors
+                const inputShape = tensorData.xs.shape.slice(1);
+                const outputShape = tensorData.labels.shape.slice(1);
                 
-                // 在Store中更新数据
-                changeData({
-                    ...tensorData,
-                    originalData: processedData,
-                    options: options
+                setNodeData(id, {
+                    dataType: 'csv',
+                    tensors: tensorData,
+                    targetColumn,
+                    isTimeSeries,
+                    timeSteps: parseInt(timeSteps),
+                    predictSteps: parseInt(predictSteps),
+                    outputFormat: outputShape,
+                    inputShape,
+                    outputShape,
+                    metadata: tensorData.meta || {}
                 });
                 
-                setProcessingStatus(`已处理CSV数据，创建了形状为 ${tensorData.xs.shape} 的输入张量`);
-            } else {
-                setProcessingStatus('请先选择或上传数据');
+                setProcessingStatus('CSV data processed successfully');
             }
         } catch (error) {
-            console.error('Error processing data:', error);
-            setProcessingStatus(`数据处理错误: ${error.message}`);
+            setProcessingStatus(`Error: ${error.message}`);
+            console.error('Data confirmation error:', error);
         }
-    };
+    }, [id, selectedOption, csvFile, processCSVData, setNodeData, targetColumn, isTimeSeries, timeSteps, predictSteps, outputShape]);
 
     return (
-        <div className="bg-white shadow-lg rounded-lg p-6 w-80">
-            <div>
-                <label htmlFor="dataSelect" className="block text-sm font-medium text-gray-700 mb-2">训练数据类型:</label>
+        <div className={styles.dataNode}>
+            <div className={styles.nodeHeader}>Data Source</div>
+            
+            <div className={styles.nodeContent}>
+                <div className={styles.optionGroup}>
+                    <label htmlFor="dataOption">Data Type:</label>
                 <select 
-                    id="dataSelect" 
-                    name="dataSelect" 
+                        id="dataOption" 
                     value={selectedOption} 
                     onChange={handleSelectChange} 
-                    className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-4"
+                        className={styles.select}
                 >
-                    <option value="handwriting">MNIST手写数字</option>
-                    <option value="csv">导入CSV数据</option>
+                        <option value="mnist">MNIST (Default)</option>
+                        <option value="csv">CSV Upload</option>
                 </select>
+                </div>
                 
                 {selectedOption === 'csv' && (
-                    <div className="mt-3 mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">上传CSV文件:</label>
+                    <>
+                        <div className={styles.fileUpload}>
+                            <label htmlFor="csvFileUpload" className={styles.fileLabel}>
+                                Upload CSV File
+                            </label>
                         <input 
                             type="file" 
+                                id="csvFileUpload"
                             accept=".csv" 
                             onChange={handleFileUpload}
-                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" 
+                                className={styles.fileInput}
                         />
+                            {csvFile && <span className={styles.fileName}>{csvFile.name}</span>}
+                        </div>
                         
                         {processingStatus && (
-                            <p className="mt-2 text-sm text-gray-600">{processingStatus}</p>
+                            <div className={styles.statusMessage}>
+                                {processingStatus}
+                            </div>
                         )}
                         
                         {csvSummary && (
-                            <div className="mt-3 mb-4">
-                                <div className="p-3 bg-gray-50 rounded-md text-sm">
-                                    <h4 className="font-medium text-gray-700 mb-1">CSV数据摘要:</h4>
-                                    <p className="text-gray-600">行数: {csvSummary.totalRows}</p>
-                                    <p className="text-gray-600">数值列: {csvSummary.numericColumns} / {csvSummary.totalColumns}</p>
-                                    <p className="text-gray-600 mb-2">特征维度: {numericColumns.length}</p>
-                                    <p className="text-gray-600 text-xs">
-                                        <span className="font-medium">可用于训练的列:</span> {numericColumns.join(', ')}
-                                    </p>
+                            <>
+                                <div className={styles.csvSummary}>
+                                    <h4>CSV Summary</h4>
+                                    <p>Rows: {csvSummary.rowCount}, Columns: {csvSummary.columnCount}</p>
+                                    
+                                    <div className={styles.columnTypes}>
+                                        <div>
+                                            <strong>Numeric Columns:</strong> 
+                                            {numericColumns.length > 0 ? 
+                                                numericColumns.join(', ') : 
+                                                'None detected'}
+                                        </div>
+                                        <div>
+                                            <strong>Categorical Columns:</strong> 
+                                            {categoricalColumns.length > 0 ? 
+                                                categoricalColumns.join(', ') : 
+                                                'None detected'}
+                                        </div>
+                                    </div>
                                 </div>
                                 
-                                {/* 数据处理选项 */}
-                                <div className="mt-4 p-3 bg-blue-50 rounded-md">
-                                    <h4 className="font-medium text-blue-700 mb-2">数据处理选项:</h4>
+                                <div className={styles.dataOptions}>
+                                    <h4>Data Processing Options</h4>
                                     
-                                    {/* 目标列选择 */}
-                                    <div className="mb-3">
-                                        <label className="block text-sm text-gray-700 mb-1">目标列:</label>
+                                    <div className={styles.optionGroup}>
+                                        <label htmlFor="targetColumn">Target Column:</label>
                                         <select 
-                                            name="targetColumn"
-                                            value={dataOptions.targetColumn}
-                                            onChange={handleOptionsChange}
-                                            className="w-full px-2 py-1 text-sm border rounded"
+                                            id="targetColumn"
+                                            value={targetColumn}
+                                            onChange={(e) => setTargetColumn(e.target.value)}
+                                            className={styles.select}
                                         >
+                                            <option value="">Select Target Column</option>
                                             {numericColumns.map(col => (
                                                 <option key={col} value={col}>{col}</option>
                                             ))}
                                         </select>
-                                        <p className="text-xs text-gray-500 mt-1">模型将预测此列值</p>
                                     </div>
                                     
-                                    {/* 时间序列选项 */}
-                                    <div className="mb-3">
-                                        <div className="flex items-center mb-1">
-                                            <input 
+                                    <div className={styles.optionGroup}>
+                                        <label htmlFor="isTimeSeries">
+                                            <input
                                                 type="checkbox"
                                                 id="isTimeSeries"
-                                                name="isTimeSeries"
-                                                checked={dataOptions.isTimeSeries}
-                                                onChange={handleOptionsChange}
-                                                className="mr-2"
+                                                checked={isTimeSeries}
+                                                onChange={(e) => setIsTimeSeries(e.target.checked)}
                                             />
-                                            <label htmlFor="isTimeSeries" className="text-sm text-gray-700">
-                                                时间序列数据
-                                            </label>
-                                        </div>
-                                        
-                                        {dataOptions.isTimeSeries && (
-                                            <div className="ml-5 mt-1">
-                                                <label className="block text-sm text-gray-700 mb-1">
-                                                    时间步数:
-                                                </label>
-                                                <input 
-                                                    type="number"
-                                                    name="timeSteps"
-                                                    value={dataOptions.timeSteps}
-                                                    onChange={handleOptionsChange}
-                                                    min="1"
-                                                    max="10"
-                                                    className="w-20 px-2 py-1 text-sm border rounded"
-                                                />
-                                            </div>
-                                        )}
+                                            Time Series Data
+                                        </label>
                                     </div>
                                     
-                                    {/* 输出形状选项 */}
-                                    <div className="mb-2">
-                                        <label className="block text-sm text-gray-700 mb-1">输出形状:</label>
-                                        <select 
-                                            name="outputShape"
-                                            value={dataOptions.outputShape}
-                                            onChange={handleOptionsChange}
-                                            className="w-full px-2 py-1 text-sm border rounded"
+                                    {isTimeSeries && (
+                                        <>
+                                            <div className={styles.optionGroup}>
+                                                <label htmlFor="timeSteps">Time Steps:</label>
+                                                <input
+                                                    type="number"
+                                                    id="timeSteps"
+                                                    min="1"
+                                                    value={timeSteps}
+                                                    onChange={(e) => setTimeSteps(e.target.value)}
+                                                    className={styles.numberInput}
+                                                />
+                                            </div>
+                                            
+                                            <div className={styles.optionGroup}>
+                                                <label htmlFor="predictSteps">Predict Steps:</label>
+                                                <input
+                                                    type="number"
+                                                    id="predictSteps"
+                                                    min="1"
+                                                    value={predictSteps}
+                                                    onChange={(e) => setPredictSteps(e.target.value)}
+                                                    className={styles.numberInput}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                    
+                                    <div className={styles.optionGroup}>
+                                        <label htmlFor="outputShape">Output Shape:</label>
+                                        <select
+                                            id="outputShape"
+                                            value={outputShape}
+                                            onChange={(e) => setOutputShape(e.target.value)}
+                                            className={styles.select}
                                         >
-                                            <option value="2d">2D (样本, 特征)</option>
-                                            <option value="3d">3D (样本, 时间步, 特征)</option>
+                                            <option value="2d">2D (Standard)</option>
+                                            <option value="3d">3D (For RNN/LSTM)</option>
                                         </select>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            3D形状适用于CNN/RNN, 2D形状适用于Dense网络
-                                        </p>
                                     </div>
-                                </div>
+                                    
+                                    <div className={styles.optionGroup}>
+                                        <label htmlFor="splitRatio">Train/Test Split:</label>
+                                        <input
+                                            type="range"
+                                            id="splitRatio"
+                                            min="0.5"
+                                            max="0.9"
+                                            step="0.05"
+                                            value={splitRatio}
+                                            onChange={(e) => setSplitRatio(e.target.value)}
+                                            className={styles.rangeInput}
+                                        />
+                                        <span>{Math.round(splitRatio * 100)}% / {Math.round((1-splitRatio) * 100)}%</span>
+                                    </div>
+                                    
+                                    <div className={styles.optionGroup}>
+                                        <label htmlFor="normalizeData">
+                                            <input
+                                                type="checkbox"
+                                                id="normalizeData"
+                                                checked={normalizeData}
+                                                onChange={(e) => setNormalizeData(e.target.checked)}
+                                            />
+                                            Normalize Data
+                                        </label>
+                                    </div>
                             </div>
+                            </>
                         )}
-                    </div>
+                    </>
                 )}
                 
                 <button 
-                    onClick={handleConfirm} 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition duration-150 ease-in-out"
+                    onClick={confirmData} 
+                    className={styles.confirmButton}
+                    disabled={selectedOption === 'csv' && !csvFile}
                 >
-                    确认使用数据
+                    Confirm Data
                 </button>
             </div>
+            
             <Handle
                 type="source"
-                position={Position.Bottom}
-                id="b"
-                className="w-4 h-4 bg-gray-300 rounded-full"
+                position="right"
+                id="output"
+                style={{ background: '#555' }}
             />
         </div>
     );
