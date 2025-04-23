@@ -1,0 +1,104 @@
+{
+  "modelStructure": [
+    {
+      "type": "mnist",
+      "config": {
+        "sequenceId": 0
+      }
+    },
+    {
+      "type": "conv2d",
+      "config": {
+        "index": 2,
+        "sequenceId": 1,
+        "kernelSize": 5,
+        "filters": 8,
+        "strides": 1,
+        "activation": "relu",
+        "kernelInitializer": "varianceScaling"
+      }
+    },
+    {
+      "type": "maxPooling2d",
+      "config": {
+        "index": 2,
+        "sequenceId": 2,
+        "poolSize": [
+          3,
+          3
+        ],
+        "strides": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "type": "conv2d",
+      "config": {
+        "index": 3,
+        "sequenceId": 3,
+        "kernelSize": 5,
+        "filters": 8,
+        "strides": 1,
+        "activation": "relu",
+        "kernelInitializer": "varianceScaling"
+      }
+    },
+    {
+      "type": "maxPooling2d",
+      "config": {
+        "index": 3,
+        "sequenceId": 4,
+        "poolSize": [
+          3,
+          3
+        ],
+        "strides": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "type": "dense",
+      "config": {
+        "index": 1,
+        "sequenceId": 5,
+        "units": 10,
+        "kernelInitializer": "varianceScaling",
+        "activation": "softmax",
+        "isOutput": true
+      }
+    },
+    {
+      "type": "trainButton",
+      "config": {
+        "sequenceId": 6
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "mnist-1745388485779",
+      "target": "conv2d-1745388489884"
+    },
+    {
+      "source": "conv2d-1745388489884",
+      "target": "maxPooling2d-1745388490678"
+    },
+    {
+      "source": "maxPooling2d-1745388490678",
+      "target": "conv2d-1745388491437"
+    },
+    {
+      "source": "conv2d-1745388491437",
+      "target": "maxPooling2d-1745388492287"
+    },
+    {
+      "source": "maxPooling2d-1745388492287",
+      "target": "dense-1745388493292"
+    }
+  ],
+  "sessionId": "03197804babad44b53ee84bc98abbd6e"
+}

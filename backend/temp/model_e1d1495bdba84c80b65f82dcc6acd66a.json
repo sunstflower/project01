@@ -1,0 +1,104 @@
+{
+  "modelStructure": [
+    {
+      "type": "mnist",
+      "config": {
+        "sequenceId": 0
+      }
+    },
+    {
+      "type": "conv2d",
+      "config": {
+        "index": 2,
+        "sequenceId": 1,
+        "kernelSize": 5,
+        "filters": 8,
+        "strides": 1,
+        "activation": "relu",
+        "kernelInitializer": "varianceScaling"
+      }
+    },
+    {
+      "type": "maxPooling2d",
+      "config": {
+        "index": 2,
+        "sequenceId": 2,
+        "poolSize": [
+          3,
+          3
+        ],
+        "strides": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "type": "conv2d",
+      "config": {
+        "index": 3,
+        "sequenceId": 3,
+        "kernelSize": 5,
+        "filters": 8,
+        "strides": 1,
+        "activation": "relu",
+        "kernelInitializer": "varianceScaling"
+      }
+    },
+    {
+      "type": "maxPooling2d",
+      "config": {
+        "index": 3,
+        "sequenceId": 4,
+        "poolSize": [
+          3,
+          3
+        ],
+        "strides": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "type": "dense",
+      "config": {
+        "index": 1,
+        "sequenceId": 5,
+        "units": 10,
+        "kernelInitializer": "varianceScaling",
+        "activation": "softmax",
+        "isOutput": true
+      }
+    },
+    {
+      "type": "trainButton",
+      "config": {
+        "sequenceId": 6
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "mnist-1745388831613",
+      "target": "conv2d-1745388832899"
+    },
+    {
+      "source": "conv2d-1745388832899",
+      "target": "maxPooling2d-1745388833582"
+    },
+    {
+      "source": "maxPooling2d-1745388833582",
+      "target": "conv2d-1745388834457"
+    },
+    {
+      "source": "conv2d-1745388834457",
+      "target": "maxPooling2d-1745388835377"
+    },
+    {
+      "source": "maxPooling2d-1745388835377",
+      "target": "dense-1745388836919"
+    }
+  ],
+  "sessionId": null
+}

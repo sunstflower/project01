@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 # 忽略虚拟环境目录
 .venv/
+# .viteignore
+venv/
 
 # 忽略 Python 编译文件
 __pycache__/

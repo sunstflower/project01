@@ -814,21 +814,259 @@ function FlowComponent() {
 
   // 处理打开TensorBoard
   const openTensorboard = useCallback(async () => {
+    // 从本地存储获取已存在的会话ID
+    const existingSessionId = localStorage.getItem('tensorboardSessionId');
+    
     try {
       setTensorboardStatus('loading');
       
-      // 直接提示用户使用TensorBoard
-      alert('请按照以下步骤操作：\n\n1. 确保Python环境已安装TensorFlow和TensorBoard\n2. 运行命令: python -m tensorboard.main --logdir=./logs\n3. 在浏览器中打开 http://localhost:6006 查看TensorBoard');
+      // 收集模型结构数据
+      const modelStructure = [];
       
-      // 自动打开TensorBoard URL
-      window.open('http://localhost:6006', '_blank');
+      console.log('准备TensorBoard数据，当前节点:', elements);
+      console.log('准备TensorBoard数据，当前连接:', edges);
       
-      setTensorboardStatus('ready');
+      // 验证是否有足够的节点
+      if (!elements || elements.length === 0) {
+        alert('请先添加模型组件');
+        setTensorboardStatus('error');
+        return;
+      }
+      
+      // 遍历节点
+      elements.forEach(node => {
+        let config = {};
+        let type = node.type;
+        
+        // 确保config是一个有效的对象
+        if (node.data) {
+          config = { ...node.data };
+          // 确保sequenceId存在于config中
+          if (typeof config.sequenceId === 'undefined') {
+            config.sequenceId = config.index || 0;
+          }
+        }
+        
+        // 根据节点类型获取配置
+        if (node.type === 'mnist' || node.type === 'useData') {
+          // 数据源节点保持简单配置
+          modelStructure.push({ 
+            type, 
+            config: { 
+              sequenceId: config.sequenceId || 0 
+            } 
+          });
+        } else if (node.type === 'conv2d') {
+          const index = config.index || 0;
+          const layerConfig = conv2dConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'maxPooling2d') {
+          const index = config.index || 0;
+          const layerConfig = maxPooling2dConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'dense') {
+          const index = config.index || 0;
+          const layerConfig = denseConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'dropout') {
+          const index = config.index || 0;
+          const layerConfig = dropoutConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'batchNorm') {
+          const index = config.index || 0;
+          const layerConfig = batchNormConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'flatten') {
+          const index = config.index || 0;
+          const layerConfig = flattenConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'lstm') {
+          const index = config.index || 0;
+          const layerConfig = lstmConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'gru') {
+          const index = config.index || 0;
+          const layerConfig = gruConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'reshape') {
+          const index = config.index || 0;
+          const layerConfig = reshapeConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'activation') {
+          const index = config.index || 0;
+          const layerConfig = activationConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'avgPooling2d') {
+          const index = config.index || 0;
+          const layerConfig = avgPooling2dConfigs[index] || {};
+          modelStructure.push({
+            type,
+            config: { 
+              ...config,
+              ...layerConfig
+            }
+          });
+        } else if (node.type === 'trainButton') {
+          modelStructure.push({
+            type,
+            config: {
+              sequenceId: config.sequenceId || 0
+            }
+          });
+        }
+      });
+      
+      // 验证收集到的数据
+      if (modelStructure.length === 0) {
+        alert('无法收集模型结构数据');
+        setTensorboardStatus('error');
+        return;
+      }
+      
+      console.log('收集到的模型结构:', modelStructure);
+      
+      // 创建要发送到后端的数据
+      const modelData = {
+        modelStructure,
+        edges: edges.map(edge => ({
+          source: edge.source,
+          target: edge.target
+        })),
+        sessionId: existingSessionId // 如果存在会话ID则传入
+      };
+      
+      console.log('发送到后端的模型数据:', modelData);
+      
+      // 检查后端服务是否可用
+      try {
+        // 首先检查是否存在活跃会话
+        if (existingSessionId) {
+          try {
+            const statusResponse = await fetch(`http://localhost:5001/api/tensorboard/status?sessionId=${existingSessionId}`);
+            const statusResult = await statusResponse.json();
+            
+            if (statusResult.running) {
+              // 如果已有会话正在运行，直接打开它
+              window.open(statusResult.url, '_blank');
+              setTensorboardStatus('ready');
+              return;
+            }
+          } catch (statusError) {
+            console.warn('检查现有会话状态失败:', statusError);
+            // 状态检查失败，继续创建新会话
+          }
+        }
+        
+        // 发送数据到后端API
+        const response = await fetch('http://localhost:5001/api/tensorboard/prepare', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(modelData),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // 后端处理成功
+          console.log('TensorBoard准备就绪:', result);
+          
+          // 保存会话ID以便后续使用
+          if (result.sessionId) {
+            localStorage.setItem('tensorboardSessionId', result.sessionId);
+            console.log('已保存TensorBoard会话ID:', result.sessionId);
+          }
+          
+          // 打开TensorBoard URL
+          window.open(result.url, '_blank');
+          setTensorboardStatus('ready');
+        } else {
+          // 后端处理失败，提供回退选项
+          console.error('TensorBoard准备失败:', result.error);
+          alert(`TensorBoard准备失败: ${result.error}\n\n请尝试手动启动TensorBoard:\n1. 确保Python环境已安装TensorFlow和TensorBoard\n2. 运行命令: python -m tensorboard.main --logdir=./logs\n3. 在浏览器中打开 http://localhost:6006 查看TensorBoard`);
+          
+          // 尝试直接打开TensorBoard URL
+          window.open('http://localhost:6006', '_blank');
+          setTensorboardStatus('error');
+        }
+      } catch (error) {
+        // 网络错误或后端服务不可用
+        console.error('无法连接到TensorBoard后端服务:', error);
+        alert('无法连接到TensorBoard后端服务。\n\n请尝试手动启动TensorBoard:\n1. 确保后端服务正在运行\n2. 确保Python环境已安装TensorFlow和TensorBoard\n3. 运行命令: python -m tensorboard.main --logdir=./logs\n4. 在浏览器中打开 http://localhost:6006 查看TensorBoard');
+        
+        // 尝试直接打开TensorBoard URL
+        window.open('http://localhost:6006', '_blank');
+        setTensorboardStatus('error');
+      }
     } catch (error) {
       console.error('TensorBoard操作错误:', error);
       setTensorboardStatus('error');
+      
+      // 提供手动启动TensorBoard的指南
+      alert('处理TensorBoard请求时出错。\n\n请尝试手动启动TensorBoard:\n1. 确保Python环境已安装TensorFlow和TensorBoard\n2. 运行命令: python -m tensorboard.main --logdir=./logs\n3. 在浏览器中打开 http://localhost:6006 查看TensorBoard');
     }
-  }, []);
+  }, [elements, edges, conv2dConfigs, maxPooling2dConfigs, denseConfigs, reshapeConfigs, lstmConfigs, gruConfigs, activationConfigs, avgPooling2dConfigs, dropoutConfigs, batchNormConfigs, flattenConfigs]);
 
   // 生成节点的悬浮提示信息
   const handleNodeHover = useCallback((event, node) => {

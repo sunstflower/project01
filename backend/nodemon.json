@@ -1,0 +1,11 @@
+{
+  "watch": ["*.js", "server.js", "tensorboard.js"],
+  "ignore": [
+    "temp/*",
+    "tb_logs/*",
+    "logs/*",
+    "venv/*",
+    "node_modules/*"
+  ],
+  "delay": "2000"
+} 
