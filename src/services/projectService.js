@@ -165,17 +165,45 @@ const projectService = {
         throw new Error('无效的项目数据');
       }
       
-      // 创建新的项目ID并保留原始数据
-      return this.createProject({
+      console.log('导入的项目数据:', projectData);
+      
+      // 确保所有必要的配置都存在
+      const importedProject = {
         name: projectData.name,
-        description: projectData.description,
-        flowData: projectData.flowData,
-        edgesData: projectData.edgesData,
-        configData: projectData.configData,
+        description: projectData.description || '',
+        flowData: projectData.flowData || [],
+        edgesData: projectData.edgesData || [],
+        configData: projectData.configData || {},
         importedAt: new Date().toISOString(),
         originalId: projectData.id
-      });
+      };
+      
+      // 检查是否有必要的配置数据
+      if (!importedProject.flowData || !Array.isArray(importedProject.flowData) || importedProject.flowData.length === 0) {
+        console.warn('导入的项目没有节点数据或节点数据为空');
+      }
+      
+      if (!importedProject.edgesData || !Array.isArray(importedProject.edgesData)) {
+        console.warn('导入的项目没有边数据或边数据格式错误');
+        importedProject.edgesData = [];
+      }
+      
+      // 转换老的数据格式（如果存在）
+      if (projectData.nodes && Array.isArray(projectData.nodes)) {
+        console.log('发现旧格式数据，进行转换');
+        importedProject.flowData = projectData.nodes;
+      }
+      
+      if (projectData.edges && Array.isArray(projectData.edges)) {
+        importedProject.edgesData = projectData.edges;
+      }
+      
+      console.log('处理后准备保存的项目数据:', importedProject);
+      
+      // 创建新的项目ID并保留原始数据
+      return this.createProject(importedProject);
     } catch (error) {
+      console.error('导入项目失败:', error);
       throw new Error('导入项目失败: ' + error.message);
     }
   }

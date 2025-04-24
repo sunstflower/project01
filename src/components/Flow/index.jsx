@@ -122,8 +122,12 @@ function FlowComponent() {
   const prevElementsLength = useRef(0);
   const prevEdgesLength = useRef(0);
   
+  // 从 store 中获取状态和操作
   const { 
     nodes, 
+    edges: storeEdges,
+    setNodes,
+    setEdges,
     addNode, 
     removeNode,
     updateNodePosition,
@@ -139,16 +143,32 @@ function FlowComponent() {
     batchNormConfigs,
     flattenConfigs,
     updateDenseConfig,
+    setConv2dConfigs,
+    setMaxPooling2dConfigs,
+    setDenseConfigs,
+    setDropoutConfigs,
+    setBatchNormConfigs,
+    setFlattenConfigs,
+    setGruConfigs,
+    setLstmConfigs,
+    setReshapeConfigs,
+    setActivationConfigs,
+    setAvgPooling2dConfigs,
+    setOptimizerConfig,
+    setLossConfig,
+    setCsvData,
+    setIsData,
     currentProject,
     setCurrentProject,
   } = useStore();
   
   const [elements, setElements] = useState([]);
-  const [edges, setEdges] = useState([]);
+  const [edges, setLocalEdges] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const [loading, setLoading] = useState(false);
   
   // 添加TensorBoard启动状态
   const [tensorboardStatus, setTensorboardStatus] = useState('idle'); // 'idle', 'loading', 'ready', 'error'
@@ -158,164 +178,153 @@ function FlowComponent() {
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [showTooltip, setShowTooltip] = useState(false);
   
-  // 从URL加载项目
+  // 简单的配置初始化函数
+  const initConfigFromProject = useCallback((configData) => {
+    console.log('初始化配置数据:', configData);
+    
+    if (!configData) return;
+    
+    // 设置每种配置类型
+    if (configData.conv2dConfigs && Array.isArray(configData.conv2dConfigs)) {
+      setConv2dConfigs(configData.conv2dConfigs);
+    }
+    
+    if (configData.maxPooling2dConfigs && Array.isArray(configData.maxPooling2dConfigs)) {
+      setMaxPooling2dConfigs(configData.maxPooling2dConfigs);
+    }
+    
+    if (configData.denseConfigs && Array.isArray(configData.denseConfigs)) {
+      setDenseConfigs(configData.denseConfigs);
+    }
+    
+    if (configData.dropoutConfigs && Array.isArray(configData.dropoutConfigs)) {
+      setDropoutConfigs(configData.dropoutConfigs);
+    }
+    
+    if (configData.batchNormConfigs && Array.isArray(configData.batchNormConfigs)) {
+      setBatchNormConfigs(configData.batchNormConfigs);
+    }
+    
+    if (configData.flattenConfigs && Array.isArray(configData.flattenConfigs)) {
+      setFlattenConfigs(configData.flattenConfigs);
+    }
+    
+    if (configData.gruConfigs && Array.isArray(configData.gruConfigs)) {
+      setGruConfigs(configData.gruConfigs);
+    }
+    
+    if (configData.lstmConfigs && Array.isArray(configData.lstmConfigs)) {
+      setLstmConfigs(configData.lstmConfigs);
+    }
+    
+    if (configData.reshapeConfigs && Array.isArray(configData.reshapeConfigs)) {
+      setReshapeConfigs(configData.reshapeConfigs);
+    }
+    
+    if (configData.activationConfigs && Array.isArray(configData.activationConfigs)) {
+      setActivationConfigs(configData.activationConfigs);
+    }
+    
+    if (configData.avgPooling2dConfigs && Array.isArray(configData.avgPooling2dConfigs)) {
+      setAvgPooling2dConfigs(configData.avgPooling2dConfigs);
+    }
+    
+    // 设置优化器和损失函数配置
+    if (configData.optimizerConfig) {
+      setOptimizerConfig(configData.optimizerConfig);
+    }
+    
+    if (configData.lossConfig) {
+      setLossConfig(configData.lossConfig);
+    }
+    
+    // 设置CSV数据（如果有）
+    if (configData.csvData) {
+      setCsvData(configData.csvData);
+    }
+    
+    // 设置数据源类型
+    if (typeof configData.isData === 'boolean') {
+      setIsData(configData.isData);
+    }
+  }, [
+    setConv2dConfigs, setMaxPooling2dConfigs, setDenseConfigs, setDropoutConfigs, 
+    setBatchNormConfigs, setFlattenConfigs, setGruConfigs, setLstmConfigs, 
+    setReshapeConfigs, setActivationConfigs, setAvgPooling2dConfigs, 
+    setOptimizerConfig, setLossConfig, setCsvData, setIsData
+  ]);
+  
+  // 将React Flow状态同步到应用状态
   useEffect(() => {
-    const loadProjectFromUrl = async () => {
-      if (projectId) {
-        try {
-          // 获取项目详情
-          const project = projectService.getProject(projectId);
-          if (!project) {
-            console.error('项目不存在：', projectId);
-            navigate('/flow');
-            return;
-          }
-          
-          // 设置当前项目
-          setCurrentProject(project);
-          
-          // 解析和加载项目数据
-          if (project.flowData) {
-            try {
-              const flowData = JSON.parse(project.flowData);
-              setElements(flowData);
-            } catch (e) {
-              console.error('解析流程图数据失败:', e);
-            }
-          }
-          
-          if (project.edgesData) {
-            try {
-              const edgesData = JSON.parse(project.edgesData);
-              setEdges(edgesData);
-            } catch (e) {
-              console.error('解析连接数据失败:', e);
-            }
-          }
-          
-          if (project.configData) {
-            try {
-              const configData = JSON.parse(project.configData);
-              // 在这里可以加载配置数据到相应的状态
-              console.log('加载项目配置:', configData);
-            } catch (e) {
-              console.error('解析配置数据失败:', e);
-            }
-          }
-          
-        } catch (error) {
-          console.error('加载项目失败:', error);
+    setElements(nodes);
+    setLocalEdges(storeEdges);
+  }, [nodes, storeEdges]);
+  
+  // 在组件加载时获取项目数据
+  useEffect(() => {
+    const fetchProject = async () => {
+      if (!projectId) return;
+      
+      try {
+        setLoading(true);
+        const project = await projectService.getProject(projectId);
+        console.log('加载项目配置:', project);
+        
+        if (!project) {
+          console.error('项目不存在');
+          navigate('/');
+          return;
         }
+        
+        // 更新当前项目
+        setCurrentProject(project);
+        
+        // 确保项目有正确的节点和边数据
+        if (!project.flowData || !Array.isArray(project.flowData)) {
+          console.warn('项目没有flowData或格式不正确，使用空数组');
+          project.flowData = [];
+        }
+        
+        if (!project.edgesData || !Array.isArray(project.edgesData)) {
+          console.warn('项目没有edgesData或格式不正确，使用空数组');
+          project.edgesData = [];
+        }
+        
+        // 将flowData转换为节点
+        const nodesData = project.flowData.map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            label: node.data?.label || node.type
+          }
+        }));
+        
+        setNodes(nodesData);
+        setEdges(project.edgesData);
+        
+        // 加载配置数据
+        if (project.configData) {
+          initConfigFromProject(project.configData);
+        }
+        
+      } catch (error) {
+        console.error('加载项目失败:', error);
+      } finally {
+        setLoading(false);
       }
     };
     
-    loadProjectFromUrl();
-    // 只在projectId变化时执行，避免其他依赖变化引起的重复加载
-  }, [projectId, navigate]);
-  
-  // 处理节点之间的连接
-  const onConnect = useCallback((params) => {
-    // 找到源节点和目标节点
-    const sourceNode = elements.find(node => node.id === params.source);
-    const targetNode = elements.find(node => node.id === params.target);
+    fetchProject();
+  }, [projectId, navigate, setCurrentProject, setNodes, setEdges, initConfigFromProject]);
+
+  // 处理边变化
+  const onEdgesChange = useCallback((changes) => {
+    setLocalEdges((eds) => applyEdgeChanges(changes, eds));
     
-    // 如果找不到节点，不执行连接
-    if (!sourceNode || !targetNode) return;
-    
-    // 验证连接是否有效
-    if (!isValidConnection(sourceNode.type, targetNode.type)) {
-      alert(`无法连接 ${sourceNode.type} 到 ${targetNode.type}，层类型不兼容`);
-      return;
-    }
-    
-    // 计算模型中所有节点的形状
-    const allNodes = [...elements, targetNode];
-    const allEdges = [...edges, { source: sourceNode.id, target: targetNode.id }];
-    const shapeMap = calculateModelShapes(allNodes, allEdges);
-    
-    // 检查目标节点是否有形状错误
-    if (shapeMap[targetNode.id]?.error) {
-      const errorMsg = shapeMap[targetNode.id].error;
-      alert(`形状不兼容: ${errorMsg}`);
-      console.warn('形状兼容性问题:', shapeMap[targetNode.id]);
-      
-      // 如果检测到需要添加Flatten层
-      if (shapeMap[targetNode.id].needsFlatten) {
-        const addFlattenConfirm = window.confirm(
-          `Dense层需要2D输入，但前一层输出为高维张量。\n` +
-          `是否自动添加Flatten层解决兼容性问题？`
-        );
-        
-        if (addFlattenConfirm) {
-          // 自动添加Flatten层
-          const flattenTimestamp = Date.now();
-          const flattenId = `flatten-${flattenTimestamp}`;
-          
-          // 创建Flatten节点
-          const flattenNode = {
-            id: flattenId,
-            type: 'flatten',
-            data: { 
-              index: flattenConfigs.length, 
-              sequenceId: elements.length
-            },
-            position: {
-              x: (sourceNode.position.x + targetNode.position.x) / 2,
-              y: (sourceNode.position.y + targetNode.position.y) / 2 - 50
-            }
-          };
-          
-          // 添加Flatten层节点
-          setElements(els => [...els, flattenNode]);
-          
-          // 创建从源节点到Flatten的连接
-          setEdges(eds => [
-            ...eds, 
-            {
-              id: `e-${sourceNode.id}-${flattenId}`,
-              source: sourceNode.id,
-              target: flattenId,
-              type: 'smoothstep',
-              animated: true,
-              style: { stroke: '#3b82f6' }
-            }
-          ]);
-          
-          // 创建从Flatten到目标节点的连接
-          setTimeout(() => {
-            setEdges(eds => [
-              ...eds, 
-              {
-                id: `e-${flattenId}-${targetNode.id}`,
-                source: flattenId,
-                target: targetNode.id,
-                type: 'smoothstep',
-                animated: true,
-                style: { stroke: '#3b82f6' }
-              }
-            ]);
-          }, 100);
-          
-          return;
-        }
-      }
-      return;
-    }
-    
-    // 执行连接
-    setEdges((eds) => addEdge({
-      ...params,
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: '#3b82f6' }
-    }, eds));
-    
-    // 检测并标记输出层
-    setTimeout(() => {
-      markOutputLayer();
-    }, 100);
-    
-  }, [elements, edges, flattenConfigs]);
+    // 将本地state同步到全局store
+    const updatedEdges = applyEdgeChanges(changes, edges);
+    setEdges(updatedEdges);
+  }, [edges, setEdges]);
 
   // 标记输出层
   const markOutputLayer = useCallback(() => {
@@ -361,7 +370,6 @@ function FlowComponent() {
   // 在元素变化后标记输出层，但避免无限循环
   useEffect(() => {
     // 只有当真正添加或删除了节点/连接时才执行标记操作
-    // 使用已经在组件顶层定义的ref
     if (isFirstRender.current) {
       isFirstRender.current = false;
       prevElementsLength.current = elements.length;
@@ -414,45 +422,6 @@ function FlowComponent() {
       }
     });
   }, [updateNodePosition]);
-
-  // 处理边变化
-  const onEdgesChange = useCallback((changes) => {
-    setEdges((eds) => applyEdgeChanges(changes, eds));
-  }, []);
-
-  // 尝试将新节点自动连接到最后一个合适的节点
-  const tryConnectToLastNode = (newNode, elements) => {
-    if (elements.length === 0) return [];
-    
-    // 检查节点是否已经有连接
-    const hasConnection = edges.some(edge => edge.target === newNode.id);
-    if (hasConnection) return [];
-    
-    // 按照添加顺序获取节点
-    const orderedNodes = [...elements].sort((a, b) => {
-      // 解析节点id中的时间戳（假设格式为 type-timestamp）
-      const aTimestamp = parseInt(a.id.split('-')[1]) || 0;
-      const bTimestamp = parseInt(b.id.split('-')[1]) || 0;
-      return bTimestamp - aTimestamp;  // 最新添加的优先
-    });
-    
-    // 找到最后添加的可能与新节点连接的节点
-    for (const lastNode of orderedNodes) {
-      if (isValidConnection(lastNode.type, newNode.type)) {
-        // 创建连接
-        return [{
-          id: `e-${lastNode.id}-${newNode.id}`,
-          source: lastNode.id,
-          target: newNode.id,
-          type: 'smoothstep',
-          animated: true,
-          style: { stroke: '#3b82f6' }
-        }];
-      }
-    }
-    
-    return [];
-  };
 
   // 处理节点删除
   const onNodeDelete = useCallback((nodes) => {
@@ -1278,6 +1247,138 @@ function FlowComponent() {
       throw error;
     }
   };
+
+  // 尝试将新节点自动连接到最后一个合适的节点
+  const tryConnectToLastNode = (newNode, elements) => {
+    if (elements.length === 0) return [];
+    
+    // 检查节点是否已经有连接
+    const hasConnection = edges.some(edge => edge.target === newNode.id);
+    if (hasConnection) return [];
+    
+    // 按照添加顺序获取节点
+    const orderedNodes = [...elements].sort((a, b) => {
+      // 解析节点id中的时间戳（假设格式为 type-timestamp）
+      const aTimestamp = parseInt(a.id.split('-')[1]) || 0;
+      const bTimestamp = parseInt(b.id.split('-')[1]) || 0;
+      return bTimestamp - aTimestamp;  // 最新添加的优先
+    });
+    
+    // 找到最后添加的可能与新节点连接的节点
+    for (const lastNode of orderedNodes) {
+      if (isValidConnection(lastNode.type, newNode.type)) {
+        // 创建连接
+        return [{
+          id: `e-${lastNode.id}-${newNode.id}`,
+          source: lastNode.id,
+          target: newNode.id,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: '#3b82f6' }
+        }];
+      }
+    }
+    
+    return [];
+  };
+
+  // 执行连接
+  const onConnect = useCallback((params) => {
+    const sourceNode = elements.find(el => el.id === params.source);
+    const targetNode = elements.find(el => el.id === params.target);
+    
+    if (!sourceNode || !targetNode) {
+      console.error('无法找到源节点或目标节点');
+      return;
+    }
+    
+    // 检查连接兼容性
+    if (!isValidConnection(sourceNode.type, targetNode.type)) {
+      // 处理特殊情况：Dense层前需要Flatten
+      if (targetNode.type === 'dense' && 
+          (sourceNode.type === 'conv2d' || 
+           sourceNode.type === 'maxPooling2d' ||
+           sourceNode.type === 'avgPooling2d')) {
+        const addFlattenConfirm = window.confirm(
+          `Dense层需要2D输入，但前一层输出为高维张量。\n` +
+          `是否自动添加Flatten层解决兼容性问题？`
+        );
+        
+        if (addFlattenConfirm) {
+          // 自动添加Flatten层
+          const flattenTimestamp = Date.now();
+          const flattenId = `flatten-${flattenTimestamp}`;
+          
+          // 创建Flatten节点
+          const flattenNode = {
+            id: flattenId,
+            type: 'flatten',
+            data: { 
+              index: flattenConfigs.length, 
+              sequenceId: elements.length
+            },
+            position: {
+              x: (sourceNode.position.x + targetNode.position.x) / 2,
+              y: (sourceNode.position.y + targetNode.position.y) / 2 - 50
+            }
+          };
+          
+          // 添加Flatten层节点
+          setElements(els => [...els, flattenNode]);
+          
+          // 创建从源节点到Flatten的连接
+          const newEdgeToFlatten = {
+            id: `e-${sourceNode.id}-${flattenId}`,
+            source: sourceNode.id,
+            target: flattenId,
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#3b82f6' }
+          };
+          
+          // 使用本地state和全局state
+          setLocalEdges(eds => [...eds, newEdgeToFlatten]);
+          setEdges(eds => [...eds, newEdgeToFlatten]);
+          
+          // 创建从Flatten到目标节点的连接
+          setTimeout(() => {
+            const newEdgeFromFlatten = {
+              id: `e-${flattenId}-${targetNode.id}`,
+              source: flattenId,
+              target: targetNode.id,
+              type: 'smoothstep',
+              animated: true,
+              style: { stroke: '#3b82f6' }
+            };
+            
+            // 使用本地state和全局state
+            setLocalEdges(eds => [...eds, newEdgeFromFlatten]);
+            setEdges(eds => [...eds, newEdgeFromFlatten]);
+          }, 100);
+          
+          return;
+        }
+      }
+      return;
+    }
+    
+    // 执行连接 - 更新本地状态和全局状态
+    const newEdge = {
+      ...params,
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: '#3b82f6' }
+    };
+    
+    setLocalEdges(eds => addEdge(newEdge, eds));
+    setEdges(eds => addEdge(newEdge, eds));
+    
+    // 检测并标记输出层
+    setTimeout(() => {
+      markOutputLayer();
+    }, 100);
+    
+  }, [elements, edges, flattenConfigs, setEdges]);
 
   return (
     <div className="w-full h-screen flex flex-col">

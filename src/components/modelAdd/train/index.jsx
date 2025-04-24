@@ -42,8 +42,9 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
     return model;
   }
 
-  console.log('Building model with nodes:', nodes);
-  console.log('Building model with edges:', edges);
+  // 输出详细节点和边信息用于调试
+  console.log('Building model with nodes:', JSON.stringify(nodes));
+  console.log('Building model with edges:', JSON.stringify(edges));
 
   // 构建邻接表
   const adjacencyList = {};
@@ -253,151 +254,175 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
   }
 
   // 编译模型
-  const optimizer = tf.train.adam();
-  model.compile({
-    optimizer: optimizer,
-    loss: 'categoricalCrossentropy',
-    metrics: ['accuracy'],
-  });
+  try {
+    console.log('Compiling model...');
+    const optimizer = tf.train.adam();
+    model.compile({
+      optimizer: optimizer,
+      loss: 'categoricalCrossentropy',
+      metrics: ['accuracy'],
+    });
+    console.log('Model compiled successfully');
+  } catch (error) {
+    console.error('Error compiling model:', error);
+    console.error('Model structure:', model.summary());
+    alert(`模型编译失败: ${error.message}\n请检查模型结构`);
+  }
 
   return model;
 }
 
 async function train(model, data, isCsv) {
-  const metrics = ['loss', 'val_loss', 'acc', 'val_acc'];
-  const container = { name: 'Model Training', tab: 'Model', styles: { height: '1000px' } };
-  const fitCallbacks = tfvis.show.fitCallbacks(container, metrics);
-
-  let trainXs, trainYs, testXs, testYs;
-
-  if (isCsv) {
-    // 处理CSV数据，检测数值列
-    console.log('Processing CSV data for training');
-    const numericColumns = [];
-    
-    // 识别所有数值列
-    if (data.length > 0 && data[0]) {
-      Object.keys(data[0]).forEach(key => {
-        if (key !== 'label' && key !== 'date' && 
-            (typeof data[0][key] === 'number' || !isNaN(parseFloat(data[0][key])))) {
-          numericColumns.push(key);
-        }
-      });
-    }
-    
-    console.log('Detected numeric columns:', numericColumns);
-    
-    if (numericColumns.length === 0) {
-      console.error('No numeric columns found in CSV data');
-      return;
-    }
-    
-    // 提取特征和标签
-    const features = data.map(row => {
-      return numericColumns.map(col => {
-        const value = typeof row[col] === 'number' ? row[col] : parseFloat(row[col]);
-        return isNaN(value) ? 0 : value;
-      });
-    });
-    
-    console.log(`Extracted ${features.length} samples, each with ${features[0].length} features`);
-    
-    // 检查数据是否足够进行训练
-    if (features.length < 10) {
-      console.error('Not enough data samples for training (minimum 10 required)');
-      return;
-    }
-    
-    const labelField = 'label';
-    const labels = data.map(row => Number(row[labelField] || 0));
-    const uniqueLabels = [...new Set(labels)];
-    const numClasses = Math.max(uniqueLabels.length, 3); // 至少有3个类别
-    
-    // 数据标准化 - 对每个特征进行归一化处理
-    const featureMeans = [];
-    const featureStds = [];
-    
-    // 计算每个特征的均值
-    for (let i = 0; i < features[0].length; i++) {
-      let sum = 0;
-      for (let j = 0; j < features.length; j++) {
-        sum += features[j][i];
-      }
-      featureMeans.push(sum / features.length);
-    }
-    
-    // 计算每个特征的标准差
-    for (let i = 0; i < features[0].length; i++) {
-      let sumSquaredDiff = 0;
-      for (let j = 0; j < features.length; j++) {
-        sumSquaredDiff += Math.pow(features[j][i] - featureMeans[i], 2);
-      }
-      featureStds.push(Math.sqrt(sumSquaredDiff / features.length) || 1);
-    }
-    
-    // 标准化特征
-    const normalizedFeatures = features.map(sample => {
-      return sample.map((value, index) => {
-        return (value - featureMeans[index]) / featureStds[index];
-      });
-    });
-    
-    console.log('Feature statistics:');
-    console.log('- Means:', featureMeans);
-    console.log('- Standard deviations:', featureStds);
-    
-    console.log(`Found ${numClasses} unique classes in label column`);
-    
-    // 创建正确的3D数组结构 [samples, timesteps, features]
-    const reshapedFeatures = [];
-    for (let i = 0; i < normalizedFeatures.length; i++) {
-      const sample = [];
-      sample.push(normalizedFeatures[i]); // 一个样本只有一个时间步
-      reshapedFeatures.push(sample);
-    }
-    
-    console.log('Final tensor shape:', 
-      `[${reshapedFeatures.length}, ${reshapedFeatures[0].length}, ${reshapedFeatures[0][0].length}]`);
-    
-    // 创建张量
-    const xs = tf.tensor3d(reshapedFeatures);
-    const ys = tf.oneHot(labels, numClasses);
-    
-    console.log('Created tensors -', 
-      'Features:', xs.shape, 
-      'Labels:', ys.shape);
-    
-    // 分割训练集和测试集
-    const splitIndex = Math.floor(xs.shape[0] * 0.8);
-    [trainXs, testXs] = tf.split(xs, [splitIndex, xs.shape[0] - splitIndex]);
-    [trainYs, testYs] = tf.split(ys, [splitIndex, ys.shape[0] - splitIndex]);
-    
-    xs.dispose();
-    ys.dispose();
-  } else {
-    const BATCH_SIZE = 512;
-    const TRAIN_DATA_SIZE = 5500;
-    const TEST_DATA_SIZE = 1000;
-
-    [trainXs, trainYs] = tf.tidy(() => {
-      const d = data.nextTrainBatch(TRAIN_DATA_SIZE);
-      return [
-        d.xs.reshape([TRAIN_DATA_SIZE, 28, 28, 1]),
-        d.labels
-      ];
-    });
-
-    [testXs, testYs] = tf.tidy(() => {
-      const d = data.nextTestBatch(TEST_DATA_SIZE);
-      return [
-        d.xs.reshape([TEST_DATA_SIZE, 28, 28, 1]),
-        d.labels
-      ];
-    });
-  }
-
-  // 训练模型
   try {
+    // 验证模型是否已编译
+    if (!model.compiled) {
+      console.error('Model is not compiled. Attempting to compile...');
+      try {
+        model.compile({
+          optimizer: 'adam',
+          loss: 'categoricalCrossentropy',
+          metrics: ['accuracy'],
+        });
+        console.log('Model compiled successfully in train function');
+      } catch (compileError) {
+        console.error('Failed to compile model in train function:', compileError);
+        throw new Error(`模型编译失败: ${compileError.message}`);
+      }
+    }
+
+    const metrics = ['loss', 'val_loss', 'acc', 'val_acc'];
+    const container = { name: 'Model Training', tab: 'Model', styles: { height: '1000px' } };
+    const fitCallbacks = tfvis.show.fitCallbacks(container, metrics);
+
+    let trainXs, trainYs, testXs, testYs;
+
+    if (isCsv) {
+      // 处理CSV数据，检测数值列
+      console.log('Processing CSV data for training');
+      const numericColumns = [];
+      
+      // 识别所有数值列
+      if (data.length > 0 && data[0]) {
+        Object.keys(data[0]).forEach(key => {
+          if (key !== 'label' && key !== 'date' && 
+              (typeof data[0][key] === 'number' || !isNaN(parseFloat(data[0][key])))) {
+            numericColumns.push(key);
+          }
+        });
+      }
+      
+      console.log('Detected numeric columns:', numericColumns);
+      
+      if (numericColumns.length === 0) {
+        console.error('No numeric columns found in CSV data');
+        return;
+      }
+      
+      // 提取特征和标签
+      const features = data.map(row => {
+        return numericColumns.map(col => {
+          const value = typeof row[col] === 'number' ? row[col] : parseFloat(row[col]);
+          return isNaN(value) ? 0 : value;
+        });
+      });
+      
+      console.log(`Extracted ${features.length} samples, each with ${features[0].length} features`);
+      
+      // 检查数据是否足够进行训练
+      if (features.length < 10) {
+        console.error('Not enough data samples for training (minimum 10 required)');
+        return;
+      }
+      
+      const labelField = 'label';
+      const labels = data.map(row => Number(row[labelField] || 0));
+      const uniqueLabels = [...new Set(labels)];
+      const numClasses = Math.max(uniqueLabels.length, 3); // 至少有3个类别
+      
+      // 数据标准化 - 对每个特征进行归一化处理
+      const featureMeans = [];
+      const featureStds = [];
+      
+      // 计算每个特征的均值
+      for (let i = 0; i < features[0].length; i++) {
+        let sum = 0;
+        for (let j = 0; j < features.length; j++) {
+          sum += features[j][i];
+        }
+        featureMeans.push(sum / features.length);
+      }
+      
+      // 计算每个特征的标准差
+      for (let i = 0; i < features[0].length; i++) {
+        let sumSquaredDiff = 0;
+        for (let j = 0; j < features.length; j++) {
+          sumSquaredDiff += Math.pow(features[j][i] - featureMeans[i], 2);
+        }
+        featureStds.push(Math.sqrt(sumSquaredDiff / features.length) || 1);
+      }
+      
+      // 标准化特征
+      const normalizedFeatures = features.map(sample => {
+        return sample.map((value, index) => {
+          return (value - featureMeans[index]) / featureStds[index];
+        });
+      });
+      
+      console.log('Feature statistics:');
+      console.log('- Means:', featureMeans);
+      console.log('- Standard deviations:', featureStds);
+      
+      console.log(`Found ${numClasses} unique classes in label column`);
+      
+      // 创建正确的3D数组结构 [samples, timesteps, features]
+      const reshapedFeatures = [];
+      for (let i = 0; i < normalizedFeatures.length; i++) {
+        const sample = [];
+        sample.push(normalizedFeatures[i]); // 一个样本只有一个时间步
+        reshapedFeatures.push(sample);
+      }
+      
+      console.log('Final tensor shape:', 
+        `[${reshapedFeatures.length}, ${reshapedFeatures[0].length}, ${reshapedFeatures[0][0].length}]`);
+      
+      // 创建张量
+      const xs = tf.tensor3d(reshapedFeatures);
+      const ys = tf.oneHot(labels, numClasses);
+      
+      console.log('Created tensors -', 
+        'Features:', xs.shape, 
+        'Labels:', ys.shape);
+      
+      // 分割训练集和测试集
+      const splitIndex = Math.floor(xs.shape[0] * 0.8);
+      [trainXs, testXs] = tf.split(xs, [splitIndex, xs.shape[0] - splitIndex]);
+      [trainYs, testYs] = tf.split(ys, [splitIndex, ys.shape[0] - splitIndex]);
+      
+      xs.dispose();
+      ys.dispose();
+    } else {
+      const BATCH_SIZE = 512;
+      const TRAIN_DATA_SIZE = 5500;
+      const TEST_DATA_SIZE = 1000;
+
+      [trainXs, trainYs] = tf.tidy(() => {
+        const d = data.nextTrainBatch(TRAIN_DATA_SIZE);
+        return [
+          d.xs.reshape([TRAIN_DATA_SIZE, 28, 28, 1]),
+          d.labels
+        ];
+      });
+
+      [testXs, testYs] = tf.tidy(() => {
+        const d = data.nextTestBatch(TEST_DATA_SIZE);
+        return [
+          d.xs.reshape([TEST_DATA_SIZE, 28, 28, 1]),
+          d.labels
+        ];
+      });
+    }
+
+    // 训练模型
     console.log(`Starting training with:
       - Training data shape: ${trainXs.shape} 
       - Training labels shape: ${trainYs.shape}
@@ -418,25 +443,10 @@ async function train(model, data, isCsv) {
       callbacks: fitCallbacks
     });
   } catch (error) {
-    console.error('Error during model training:', error);
-    console.error('Error details:', error.message);
-    
-    // 详细打印张量信息以便于调试
-    console.error('Feature tensor info:', {
-      shape: trainXs.shape,
-      dataType: trainXs.dtype,
-      size: trainXs.size
-    });
-    
-    tfvis.show.text({ name: 'Training Error', tab: 'Model' }, 
-      `训练错误: ${error.message}\n请检查console获取更多详情。`);
-      
+    console.error('Error in train function:', error);
+    // 使用console.error代替tfvis.show.text，因为后者可能会不存在
+    console.error(`训练错误: ${error.message}\n请检查console获取更多详情。`);
     throw error;
-  } finally {
-    trainXs.dispose();
-    trainYs.dispose();
-    testXs.dispose();
-    testYs.dispose();
   }
 }
 
@@ -452,22 +462,39 @@ function TrainButton() {
   } = useStore();
 
   const handleTrainClick = useCallback(async () => {
-    let data;
-    let isCsv = false;
+    try {
+      console.log('Train button clicked');
+      console.log('Current store state - nodes:', nodes);
+      console.log('Current store state - edges:', edges);
+      
+      let data;
+      let isCsv = false;
 
-    if (isData) {
-      data = csvData;
-      isCsv = true;
-    } else {
-      data = new MnistData();
-      await data.load();
-      await showExamples(data);
+      if (isData) {
+        data = csvData;
+        isCsv = true;
+      } else {
+        data = new MnistData();
+        await data.load();
+        await showExamples(data);
+      }
+
+      const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges);
+      
+      // 检查模型是否有效
+      if (!model || !model.layers || model.layers.length === 0) {
+        console.error('Invalid model created. Model has no layers.');
+        alert('创建模型失败。请确保模型结构正确。');
+        return;
+      }
+      
+      tfvis.show.modelSummary({ name: 'Model Architecture', tab: 'Model' }, model);
+
+      await train(model, data, isCsv);
+    } catch (error) {
+      console.error('Error in handleTrainClick:', error);
+      alert(`训练过程中发生错误: ${error.message}`);
     }
-
-    const model = getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges);
-    tfvis.show.modelSummary({ name: 'Model Architecture', tab: 'Model' }, model);
-
-    await train(model, data, isCsv);
   }, [conv2dConfigs, maxPooling2dConfigs, denseConfigs, csvData, isData, nodes, edges]);
 
   return (

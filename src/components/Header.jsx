@@ -207,7 +207,7 @@ function Header({ currentProject, onSaveProject }) {
                 title={currentProject?.id ? "导出已保存的项目" : "导出当前未保存的状态"}
               >
                 导出项目
-                {!currentProject?.id && <span className="ml-1 text-xs">(未保存)</span>}
+                {!currentProject?.id && <span className="ml-1 text-xs"></span>}
               </button>
               
               <a
