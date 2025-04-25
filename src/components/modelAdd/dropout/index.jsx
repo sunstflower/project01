@@ -1,18 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import NodeContainer from '../NodeContainer';
 import useStore from '@/store';
 
-function DropoutNode({ data }) {
+function DropoutNode({ data, id }) {
   const { dropoutConfigs, updateDropoutConfig } = useStore();
-  const configIndex = data.index || 0;
-  const config = dropoutConfigs[configIndex] || { rate: 0.2 };
+  
+  // 使用节点ID而非索引
+  const nodeId = id;
+  
+  // 确保配置存在
+  useEffect(() => {
+    // 检查该节点ID是否已有配置
+    if (!dropoutConfigs[nodeId]) {
+      // 创建新配置
+      updateDropoutConfig(nodeId, { rate: 0.2 });
+      
+      console.log(`Dropout层 ${nodeId} 设置默认值`);
+    }
+  }, [nodeId, dropoutConfigs, updateDropoutConfig]);
+
+  // 获取该节点的配置
+  const config = dropoutConfigs[nodeId] || { rate: 0.2 };
   const [rate, setRate] = useState(config.rate);
+  
+  // 当配置变化时更新本地状态
+  useEffect(() => {
+    setRate(config.rate);
+  }, [config.rate]);
 
   const handleRateChange = (e) => {
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0 && value <= 1) {
       setRate(value);
-      updateDropoutConfig(configIndex, { rate: value });
+      updateDropoutConfig(nodeId, { rate: value });
     }
   };
 

@@ -29,10 +29,29 @@ const stringToArray = (str) => {
   return str;
 };
 
-function MaxPooling2DNode({ data }) {
+function MaxPooling2DNode({ data, id }) {
   const { maxPooling2dConfigs, updateMaxPooling2dConfig } = useStore();
-  const configIndex = data.index || 0;
-  const config = maxPooling2dConfigs[configIndex] || {
+  
+  // 使用节点ID而非索引
+  const nodeId = id;
+  
+  // 确保配置存在
+  useEffect(() => {
+    // 检查该节点ID是否已有配置
+    if (!maxPooling2dConfigs[nodeId]) {
+      // 创建新配置
+      updateMaxPooling2dConfig(nodeId, {
+        poolSize: [2, 2],
+        strides: [2, 2],
+        padding: 'valid',
+      });
+      
+      console.log(`MaxPooling2D层 ${nodeId} 设置默认值`);
+    }
+  }, [nodeId, maxPooling2dConfigs, updateMaxPooling2dConfig]);
+
+  // 获取该节点的配置
+  const config = maxPooling2dConfigs[nodeId] || {
     poolSize: [2, 2],
     strides: [2, 2],
     padding: 'valid',
@@ -59,7 +78,7 @@ function MaxPooling2DNode({ data }) {
     
     // 更新store中的配置，转换回数组形式
     const valueArray = stringToArray(valueStr);
-    updateMaxPooling2dConfig(configIndex, { ...config, poolSize: valueArray });
+    updateMaxPooling2dConfig(nodeId, { ...config, poolSize: valueArray });
   };
 
   const handleStridesChange = (e) => {
@@ -69,7 +88,7 @@ function MaxPooling2DNode({ data }) {
     // 尝试解析为数组，如果是有效格式
     try {
       const valueArray = stringToArray(valueStr);
-      updateMaxPooling2dConfig(configIndex, { ...config, strides: valueArray });
+      updateMaxPooling2dConfig(nodeId, { ...config, strides: valueArray });
     } catch (error) {
       console.error('无效的步长格式:', error);
     }
@@ -78,7 +97,7 @@ function MaxPooling2DNode({ data }) {
   const handlePaddingChange = (e) => {
     const value = e.target.value;
     setPadding(value);
-    updateMaxPooling2dConfig(configIndex, { ...config, padding: value });
+    updateMaxPooling2dConfig(nodeId, { ...config, padding: value });
   };
 
   return (

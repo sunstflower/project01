@@ -1,11 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import NodeContainer from '../NodeContainer';
 import useStore from '@/store';
 
-function BatchNormNode({ data }) {
+function BatchNormNode({ data, id }) {
   const { batchNormConfigs, updateBatchNormConfig } = useStore();
-  const configIndex = data.index || 0;
-  const config = batchNormConfigs[configIndex] || {
+  
+  // 使用节点ID而非索引
+  const nodeId = id;
+  
+  // 确保配置存在
+  useEffect(() => {
+    // 检查该节点ID是否已有配置
+    if (!batchNormConfigs[nodeId]) {
+      // 创建新配置
+      updateBatchNormConfig(nodeId, {
+        axis: -1,
+        momentum: 0.99,
+        epsilon: 0.001,
+        center: true,
+        scale: true,
+      });
+      
+      console.log(`BatchNorm层 ${nodeId} 设置默认值`);
+    }
+  }, [nodeId, batchNormConfigs, updateBatchNormConfig]);
+
+  // 获取该节点的配置
+  const config = batchNormConfigs[nodeId] || {
     axis: -1,
     momentum: 0.99,
     epsilon: 0.001,
@@ -17,12 +38,20 @@ function BatchNormNode({ data }) {
   const [epsilon, setEpsilon] = useState(config.epsilon);
   const [center, setCenter] = useState(config.center);
   const [scale, setScale] = useState(config.scale);
+  
+  // 当配置变化时更新本地状态
+  useEffect(() => {
+    setMomentum(config.momentum);
+    setEpsilon(config.epsilon);
+    setCenter(config.center);
+    setScale(config.scale);
+  }, [config]);
 
   const handleMomentumChange = (e) => {
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0 && value <= 1) {
       setMomentum(value);
-      updateBatchNormConfig(configIndex, { ...config, momentum: value });
+      updateBatchNormConfig(nodeId, { ...config, momentum: value });
     }
   };
 
@@ -30,20 +59,20 @@ function BatchNormNode({ data }) {
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0.0001 && value <= 0.1) {
       setEpsilon(value);
-      updateBatchNormConfig(configIndex, { ...config, epsilon: value });
+      updateBatchNormConfig(nodeId, { ...config, epsilon: value });
     }
   };
 
   const handleCenterChange = (e) => {
     const checked = e.target.checked;
     setCenter(checked);
-    updateBatchNormConfig(configIndex, { ...config, center: checked });
+    updateBatchNormConfig(nodeId, { ...config, center: checked });
   };
 
   const handleScaleChange = (e) => {
     const checked = e.target.checked;
     setScale(checked);
-    updateBatchNormConfig(configIndex, { ...config, scale: checked });
+    updateBatchNormConfig(nodeId, { ...config, scale: checked });
   };
 
   return (
@@ -98,7 +127,7 @@ function BatchNormNode({ data }) {
             <div className="relative inline-block w-10 align-middle select-none">
               <input 
                 type="checkbox" 
-                id="center" 
+                id={`center-${nodeId}`}
                 checked={center} 
                 onChange={handleCenterChange}
                 className="sr-only"
@@ -118,7 +147,7 @@ function BatchNormNode({ data }) {
             <div className="relative inline-block w-10 align-middle select-none">
               <input 
                 type="checkbox" 
-                id="scale" 
+                id={`scale-${nodeId}`}
                 checked={scale} 
                 onChange={handleScaleChange}
                 className="sr-only"

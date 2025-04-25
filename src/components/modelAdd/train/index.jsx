@@ -112,17 +112,17 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
             console.log('Adding first Conv2D layer with inputShape');
             model.add(tf.layers.conv2d({
               inputShape: [IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS],
-              ...conv2dConfigs[node.configIndex]
+              ...conv2dConfigs[node.id]
             }));
           } else {
             console.log('Adding Conv2D layer');
-            model.add(tf.layers.conv2d(conv2dConfigs[node.configIndex]));
+            model.add(tf.layers.conv2d(conv2dConfigs[node.id]));
           }
           layerCount++;
           break;
         case 'maxPooling2d':
           console.log('Adding MaxPooling2D layer');
-          model.add(tf.layers.maxPooling2d(maxPooling2dConfigs[node.configIndex]));
+          model.add(tf.layers.maxPooling2d(maxPooling2dConfigs[node.id]));
           layerCount++;
           break;
         case 'dense':
@@ -146,17 +146,17 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
           }
           
           console.log('Adding Dense layer');
-          model.add(tf.layers.dense(denseConfigs[node.configIndex] || denseConfigs[0]));
+          model.add(tf.layers.dense(denseConfigs[node.id]));
           layerCount++;
           break;
         case 'dropout':
           console.log('Adding Dropout layer');
-          model.add(tf.layers.dropout(useStore.getState().dropoutConfigs[node.configIndex]));
+          model.add(tf.layers.dropout(useStore.getState().dropoutConfigs[node.id]));
           layerCount++;
           break;
         case 'batchNorm':
           console.log('Adding BatchNormalization layer');
-          model.add(tf.layers.batchNormalization(useStore.getState().batchNormConfigs[node.configIndex]));
+          model.add(tf.layers.batchNormalization(useStore.getState().batchNormConfigs[node.id]));
           layerCount++;
           break;
         case 'flatten':
@@ -171,11 +171,11 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
             console.log('Adding first LSTM layer with inputShape');
             model.add(tf.layers.lstm({
               inputShape: [null, 28], // 假设输入是序列数据，需要根据实际情况调整
-              ...useStore.getState().lstmConfigs[node.configIndex]
+              ...useStore.getState().lstmConfigs[node.id]
             }));
           } else {
             console.log('Adding LSTM layer');
-            model.add(tf.layers.lstm(useStore.getState().lstmConfigs[node.configIndex]));
+            model.add(tf.layers.lstm(useStore.getState().lstmConfigs[node.id]));
           }
           layerCount++;
           break;
@@ -210,27 +210,27 @@ function getModel(conv2dConfigs, maxPooling2dConfigs, denseConfigs, nodes, edges
             
             model.add(tf.layers.gru({
               inputShape: [null, featuresDim], // 动态设置特征维度
-              ...useStore.getState().gruConfigs[node.configIndex]
+              ...useStore.getState().gruConfigs[node.id]
             }));
           } else {
             console.log('Adding GRU layer');
-            model.add(tf.layers.gru(useStore.getState().gruConfigs[node.configIndex]));
+            model.add(tf.layers.gru(useStore.getState().gruConfigs[node.id]));
           }
           layerCount++;
           break;
         case 'activation':
           console.log('Adding Activation layer');
-          model.add(tf.layers.activation(useStore.getState().activationConfigs[node.configIndex]));
+          model.add(tf.layers.activation(useStore.getState().activationConfigs[node.id]));
           layerCount++;
           break;
         case 'reshape':
           console.log('Adding Reshape layer');
-          model.add(tf.layers.reshape(useStore.getState().reshapeConfigs[node.configIndex]));
+          model.add(tf.layers.reshape(useStore.getState().reshapeConfigs[node.id]));
           layerCount++;
           break;
         case 'avgPooling2d':
           console.log('Adding AvgPooling2D layer');
-          model.add(tf.layers.averagePooling2d(useStore.getState().avgPooling2dConfigs[node.configIndex]));
+          model.add(tf.layers.averagePooling2d(useStore.getState().avgPooling2dConfigs[node.id]));
           layerCount++;
           break;
         default:

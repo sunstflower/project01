@@ -591,55 +591,41 @@ function FlowComponent() {
     }
   }, [nodes, elements.length]);
 
-  // 添加节点的处理函数
+  // 处理添加节点
   const handleAddNode = useCallback((type, position) => {
-    // 检查是否已经存在相同时间戳的节点，防止重复添加
-    const currentTimestamp = Date.now();
-    const nodeId = `${type}-${currentTimestamp}`;
-    
-    // 检查节点是否已存在
-    if (elements.some(node => node.id === nodeId)) {
-      console.log(`节点${nodeId}已存在，跳过添加`);
-      return;
-    }
-    
-    let newNode = {};
-    let configIndex = 0;
-    
-    // 获取当前节点数量作为序列ID
+    let newNode = null;
+    const nodeId = `${type}-${Date.now()}`;
     const sequenceId = elements.length;
     
-    // 根据节点类型创建不同的节点
+    // 使用节点ID而非索引配置
+    // 注意：这里无需再使用configIndex
+    
     if (type === 'conv2d') {
-      configIndex = conv2dConfigs.length;
       newNode = {
         id: nodeId,
         type: 'conv2d',
         data: { 
-          index: configIndex,
-          sequenceId: sequenceId 
+          sequenceId: sequenceId
         },
         position,
       };
     } else if (type === 'maxPooling2d') {
-      configIndex = maxPooling2dConfigs.length;
       newNode = {
         id: nodeId,
         type: 'maxPooling2d',
         data: { 
-          index: configIndex,
+          index: maxPooling2dConfigs.length,
           sequenceId: sequenceId 
         },
         position,
       };
     } else if (type === 'dense') {
-      configIndex = denseConfigs.length;
       newNode = {
         id: nodeId,
         type: 'dense',
         data: { 
-          index: configIndex,
-          sequenceId: sequenceId 
+          sequenceId: sequenceId,
+          isOutput: false
         },
         position,
       };
@@ -648,6 +634,7 @@ function FlowComponent() {
         id: nodeId,
         type: 'trainButton',
         data: { 
+          label: 'Train Model',
           sequenceId: sequenceId 
         },
         position,
@@ -656,8 +643,9 @@ function FlowComponent() {
       newNode = {
         id: nodeId,
         type: 'useData',
-        data: { 
-          sequenceId: sequenceId 
+        data: {
+          label: 'CSV Data Import',
+          sequenceId: sequenceId
         },
         position,
       };
@@ -666,6 +654,7 @@ function FlowComponent() {
         id: nodeId,
         type: 'mnist',
         data: { 
+          label: 'MNIST Dataset',
           sequenceId: sequenceId 
         },
         position,
@@ -749,7 +738,7 @@ function FlowComponent() {
     }
     
     // 添加节点到状态中
-    addNode(type, configIndex, nodeId);
+    addNode(type, sequenceId, nodeId);
     setElements((els) => [...els, newNode]);
     
     // 尝试自动连接到前一个节点
@@ -757,7 +746,7 @@ function FlowComponent() {
     if (newEdges.length > 0) {
       setEdges(edges => [...edges, ...newEdges]);
     }
-  }, [addNode, conv2dConfigs.length, maxPooling2dConfigs.length, denseConfigs.length, elements, edges]);
+  }, [addNode, maxPooling2dConfigs.length, denseConfigs.length, elements, edges]);
 
   // 使用ReactDnD处理拖拽
   const [{ isOver }, drop] = useDrop({

@@ -10,142 +10,185 @@ const useStore = create((set) => ({
   })),
 
   // 卷积层配置
-  conv2dConfigs: [
-    {
-      kernelSize: 5,
-      filters: 8,
-      strides: 1,
-      activation: 'relu',
-      kernelInitializer: 'varianceScaling',
-    },
-    {
-      kernelSize: 5,
-      filters: 16,
-      strides: 1,
-      activation: 'relu',
-      kernelInitializer: 'varianceScaling',
+  conv2dConfigs: {},
+  addConv2dConfig: (nodeId) => set((state) => ({
+    conv2dConfigs: {
+      ...state.conv2dConfigs,
+      [nodeId]: {
+        kernelSize: 5,
+        filters: 8,
+        strides: 1,
+        activation: 'relu',
+        kernelInitializer: 'varianceScaling',
+      }
     }
-  ],
-  addConv2dConfig: () => set((state) => ({
-    conv2dConfigs: [...state.conv2dConfigs, {
-      kernelSize: 5,
-      filters: 8,
-      strides: 1,
-      activation: 'relu',
-      kernelInitializer: 'varianceScaling',
-    }]
   })),
-  updateConv2dConfig: (index, config) => set((state) => ({
-    conv2dConfigs: state.conv2dConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  updateConv2dConfig: (nodeId, config) => set((state) => ({
+    conv2dConfigs: {
+      ...state.conv2dConfigs,
+      [nodeId]: {
+        ...(state.conv2dConfigs[nodeId] || {}),
+        ...config
+      }
+    }
   })),
-  removeConv2dConfig: (index) => set((state) => ({
-    conv2dConfigs: state.conv2dConfigs.filter((_, i) => i !== index)
-  })),
+  removeConv2dConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.conv2dConfigs };
+    delete newConfigs[nodeId];
+    return { conv2dConfigs: newConfigs };
+  }),
 
   // 最大池化层配置
-  maxPooling2dConfigs: [
-    {
-      poolSize: [3, 3],
-      strides: [3, 3],
-    },
-    {
-      poolSize: [2, 2],
-      strides: [2, 2],
+  maxPooling2dConfigs: {},
+  addMaxPooling2dConfig: (nodeId) => set((state) => ({
+    maxPooling2dConfigs: {
+      ...state.maxPooling2dConfigs,
+      [nodeId]: {
+        poolSize: [2, 2],
+        strides: [2, 2],
+      }
     }
-  ],
-  addMaxPooling2dConfig: () => set((state) => ({
-    maxPooling2dConfigs: [...state.maxPooling2dConfigs, {
-      poolSize: [3, 3],
-      strides: [3, 3],
-    }]
   })),
-  updateMaxPooling2dConfig: (index, config) => set((state) => ({
-    maxPooling2dConfigs: state.maxPooling2dConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  updateMaxPooling2dConfig: (nodeId, config) => set((state) => ({
+    maxPooling2dConfigs: {
+      ...state.maxPooling2dConfigs,
+      [nodeId]: {
+        ...(state.maxPooling2dConfigs[nodeId] || {}),
+        ...config
+      }
+    }
   })),
-  removeMaxPooling2dConfig: (index) => set((state) => ({
-    maxPooling2dConfigs: state.maxPooling2dConfigs.filter((_, i) => i !== index)
-  })),
+  removeMaxPooling2dConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.maxPooling2dConfigs };
+    delete newConfigs[nodeId];
+    return { maxPooling2dConfigs: newConfigs };
+  }),
 
-  // 全连接层配置 - 改为数组形式
-  denseConfigs: [{
-    units: 10,
-    kernelInitializer: 'varianceScaling',
-    activation: 'softmax'
-  }],
-  addDenseConfig: () => set((state) => ({
-    denseConfigs: [...state.denseConfigs, {
-      units: 128,
-      kernelInitializer: 'varianceScaling',
-      activation: 'relu'
-    }]
+  // 全连接层配置 - 改为对象形式，基于节点ID
+  denseConfigs: {},
+  addDenseConfig: (nodeId) => set((state) => ({
+    denseConfigs: {
+      ...state.denseConfigs,
+      [nodeId]: {
+        units: 128,
+        kernelInitializer: 'varianceScaling',
+        activation: 'relu'
+      }
+    }
   })),
-  updateDenseConfig: (index, config) => set((state) => ({
-    denseConfigs: state.denseConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  updateDenseConfig: (nodeId, config) => set((state) => ({
+    denseConfigs: {
+      ...state.denseConfigs,
+      [nodeId]: {
+        ...(state.denseConfigs[nodeId] || {}),
+        ...config
+      }
+    }
   })),
-  removeDenseConfig: (index) => set((state) => ({
-    denseConfigs: state.denseConfigs.filter((_, i) => i !== index)
-  })),
+  removeDenseConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.denseConfigs };
+    delete newConfigs[nodeId];
+    return { denseConfigs: newConfigs };
+  }),
 
   // 新增: Dropout层配置
-  dropoutConfigs: [],
-  addDropoutConfig: () => set((state) => ({
-    dropoutConfigs: [...state.dropoutConfigs, {
-      rate: 0.2,
-    }]
+  dropoutConfigs: {},
+  addDropoutConfig: (nodeId) => set((state) => ({
+    dropoutConfigs: {
+      ...state.dropoutConfigs,
+      [nodeId]: {
+        rate: 0.2,
+      }
+    }
   })),
-  updateDropoutConfig: (index, config) => set((state) => ({
-    dropoutConfigs: state.dropoutConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  updateDropoutConfig: (nodeId, config) => set((state) => ({
+    dropoutConfigs: {
+      ...state.dropoutConfigs,
+      [nodeId]: {
+        ...(state.dropoutConfigs[nodeId] || {}),
+        ...config
+      }
+    }
   })),
-  removeDropoutConfig: (index) => set((state) => ({
-    dropoutConfigs: state.dropoutConfigs.filter((_, i) => i !== index)
-  })),
+  removeDropoutConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.dropoutConfigs };
+    delete newConfigs[nodeId];
+    return { dropoutConfigs: newConfigs };
+  }),
 
   // 新增: BatchNormalization层配置
-  batchNormConfigs: [],
-  addBatchNormConfig: () => set((state) => ({
-    batchNormConfigs: [...state.batchNormConfigs, {
-      axis: -1,
-      momentum: 0.99,
-      epsilon: 0.001,
-      center: true,
-      scale: true,
-    }]
+  batchNormConfigs: {},
+  addBatchNormConfig: (nodeId) => set((state) => ({
+    batchNormConfigs: {
+      ...state.batchNormConfigs,
+      [nodeId]: {
+        axis: -1,
+        momentum: 0.99,
+        epsilon: 0.001,
+        center: true,
+        scale: true,
+      }
+    }
   })),
-  updateBatchNormConfig: (index, config) => set((state) => ({
-    batchNormConfigs: state.batchNormConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  updateBatchNormConfig: (nodeId, config) => set((state) => ({
+    batchNormConfigs: {
+      ...state.batchNormConfigs,
+      [nodeId]: {
+        ...(state.batchNormConfigs[nodeId] || {}),
+        ...config
+      }
+    }
   })),
-  removeBatchNormConfig: (index) => set((state) => ({
-    batchNormConfigs: state.batchNormConfigs.filter((_, i) => i !== index)
-  })),
+  removeBatchNormConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.batchNormConfigs };
+    delete newConfigs[nodeId];
+    return { batchNormConfigs: newConfigs };
+  }),
 
   // 新增: Flatten层配置
-  flattenConfigs: [],
-  addFlattenConfig: () => set((state) => ({
-    flattenConfigs: [...state.flattenConfigs, {}]
+  flattenConfigs: {},
+  addFlattenConfig: (nodeId) => set((state) => ({
+    flattenConfigs: {
+      ...state.flattenConfigs,
+      [nodeId]: {}
+    }
   })),
-  removeFlattenConfig: (index) => set((state) => ({
-    flattenConfigs: state.flattenConfigs.filter((_, i) => i !== index)
-  })),
+  removeFlattenConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.flattenConfigs };
+    delete newConfigs[nodeId];
+    return { flattenConfigs: newConfigs };
+  }),
 
   // 新增: LSTM层配置
-  lstmConfigs: [],
-  addLstmConfig: () => set((state) => ({
-    lstmConfigs: [...state.lstmConfigs, {
-      units: 128,
-      activation: 'tanh',
-      recurrentActivation: 'sigmoid',
-      returnSequences: false,
-      goBackwards: false,
-      dropout: 0.0,
-      recurrentDropout: 0.0,
-    }]
+  lstmConfigs: {},
+  addLstmConfig: (nodeId) => set((state) => ({
+    lstmConfigs: {
+      ...state.lstmConfigs,
+      [nodeId]: {
+        units: 128,
+        activation: 'tanh',
+        recurrentActivation: 'sigmoid',
+        returnSequences: false,
+        goBackwards: false,
+        dropout: 0.0,
+        recurrentDropout: 0.0,
+      }
+    }
   })),
-  updateLstmConfig: (index, config) => set((state) => ({
-    lstmConfigs: state.lstmConfigs.map((c, i) => (i === index ? { ...c, ...config } : c))
+  updateLstmConfig: (nodeId, config) => set((state) => ({
+    lstmConfigs: {
+      ...state.lstmConfigs,
+      [nodeId]: {
+        ...(state.lstmConfigs[nodeId] || {}),
+        ...config
+      }
+    }
   })),
-  removeLstmConfig: (index) => set((state) => ({
-    lstmConfigs: state.lstmConfigs.filter((_, i) => i !== index)
-  })),
+  removeLstmConfig: (nodeId) => set((state) => {
+    const newConfigs = { ...state.lstmConfigs };
+    delete newConfigs[nodeId];
+    return { lstmConfigs: newConfigs };
+  }),
 
   // 新增: GRU层配置
   gruConfigs: [],
@@ -269,19 +312,19 @@ const useStore = create((set) => ({
     
     // 添加对应的配置
     if (type === 'conv2d' && configIndex !== undefined) {
-      state.addConv2dConfig();
+      state.addConv2dConfig(id);
     } else if (type === 'maxPooling2d' && configIndex !== undefined) {
-      state.addMaxPooling2dConfig();
+      state.addMaxPooling2dConfig(id);
     } else if (type === 'dense' && configIndex !== undefined) {
-      state.addDenseConfig();
+      state.addDenseConfig(id);
     } else if (type === 'dropout' && configIndex !== undefined) {
-      state.addDropoutConfig();
+      state.addDropoutConfig(id);
     } else if (type === 'batchNorm' && configIndex !== undefined) {
-      state.addBatchNormConfig();
+      state.addBatchNormConfig(id);
     } else if (type === 'flatten' && configIndex !== undefined) {
-      state.addFlattenConfig();
+      state.addFlattenConfig(id);
     } else if (type === 'lstm' && configIndex !== undefined) {
-      state.addLstmConfig();
+      state.addLstmConfig(id);
     } else if (type === 'gru' && configIndex !== undefined) {
       state.addGruConfig();
     } else if (type === 'activation' && configIndex !== undefined) {
@@ -332,19 +375,19 @@ const useStore = create((set) => ({
 
     // 删除相关的配置
     if (nodeToRemove.type === 'conv2d' && nodeToRemove.configIndex !== undefined) {
-      state.removeConv2dConfig(nodeToRemove.configIndex);
+      state.removeConv2dConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'maxPooling2d' && nodeToRemove.configIndex !== undefined) {
-      state.removeMaxPooling2dConfig(nodeToRemove.configIndex);
+      state.removeMaxPooling2dConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'dense' && nodeToRemove.configIndex !== undefined) {
-      state.removeDenseConfig(nodeToRemove.configIndex);
+      state.removeDenseConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'dropout' && nodeToRemove.configIndex !== undefined) {
-      state.removeDropoutConfig(nodeToRemove.configIndex);
+      state.removeDropoutConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'batchNorm' && nodeToRemove.configIndex !== undefined) {
-      state.removeBatchNormConfig(nodeToRemove.configIndex);
+      state.removeBatchNormConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'flatten' && nodeToRemove.configIndex !== undefined) {
-      state.removeFlattenConfig(nodeToRemove.configIndex);
+      state.removeFlattenConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'lstm' && nodeToRemove.configIndex !== undefined) {
-      state.removeLstmConfig(nodeToRemove.configIndex);
+      state.removeLstmConfig(nodeToRemove.id);
     } else if (nodeToRemove.type === 'gru' && nodeToRemove.configIndex !== undefined) {
       state.removeGruConfig(nodeToRemove.configIndex);
     } else if (nodeToRemove.type === 'activation' && nodeToRemove.configIndex !== undefined) {
@@ -375,37 +418,37 @@ const useStore = create((set) => ({
       if (node.type === 'conv2d') {
         return {
           type: 'conv2d',
-          config: state.conv2dConfigs[node.configIndex]
+          config: state.conv2dConfigs[node.id]
         };
       } else if (node.type === 'maxPooling2d') {
         return {
           type: 'maxPooling2d',
-          config: state.maxPooling2dConfigs[node.configIndex]
+          config: state.maxPooling2dConfigs[node.id]
         };
       } else if (node.type === 'dense') {
         return {
           type: 'dense',
-          config: state.denseConfigs[node.configIndex]
+          config: state.denseConfigs[node.id]
         };
       } else if (node.type === 'dropout') {
         return {
           type: 'dropout',
-          config: state.dropoutConfigs[node.configIndex]
+          config: state.dropoutConfigs[node.id]
         };
       } else if (node.type === 'batchNorm') {
         return {
           type: 'batchNorm',
-          config: state.batchNormConfigs[node.configIndex]
+          config: state.batchNormConfigs[node.id]
         };
       } else if (node.type === 'flatten') {
         return {
           type: 'flatten',
-          config: state.flattenConfigs[node.configIndex]
+          config: state.flattenConfigs[node.id]
         };
       } else if (node.type === 'lstm') {
         return {
           type: 'lstm',
-          config: state.lstmConfigs[node.configIndex]
+          config: state.lstmConfigs[node.id]
         };
       } else if (node.type === 'gru') {
         return {
